@@ -141,6 +141,14 @@ breaks on dark themes and is not the intended Telegram look). Delivered and read
 share one hue and differ only in alpha — the meaning is carried by one tick vs.
 two.
 
+The glyph itself is stroke-based, not a filled path. The coordinates in
+`MessageStatusTicks.tsx` are the stroke centrelines of Material's `done_all`
+outline, traced from its 24-unit grid — so the read state is two *overlapping*
+checks with the rear one interrupted where the front crosses it, not two checks
+placed side by side. Both states share a baseline and crop the same 15-unit
+band of the viewBox, which is what keeps them from jumping when a post flips
+from delivered to read; change one viewBox and you have to change the other.
+
 The tick container is `position: absolute` inside a `position: relative` post
 body so ticks never change post height. Changing that will shift the layout of
 every message in the app.
