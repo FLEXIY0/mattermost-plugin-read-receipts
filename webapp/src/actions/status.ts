@@ -3,8 +3,9 @@ import type {Store} from 'redux';
 import type {GlobalState} from '@mattermost/types/store';
 
 import manifest from '../manifest';
+import {DEFAULT_TICK_SIZE, MAX_TICK_SIZE, MIN_TICK_SIZE} from '../constants';
 import type {MessageStatusValue, StatusEntry, StatusResponse, StatusUpdatePayload} from '../types/store';
-import {PLUGIN_STATE_KEY, SET_STATUS, SET_STATUSES} from '../types/store';
+import {PLUGIN_STATE_KEY, SET_STATUS, SET_STATUSES, SET_TICK_SIZE} from '../types/store';
 
 export function getPluginState(state: GlobalState) {
     return (state as GlobalState & Record<string, {statuses: Record<string, StatusEntry>}>)[PLUGIN_STATE_KEY];
@@ -12,6 +13,11 @@ export function getPluginState(state: GlobalState) {
 
 export function getPostStatus(state: GlobalState, postId: string): StatusEntry | undefined {
     return getPluginState(state)?.statuses?.[postId];
+}
+
+export function getTickSize(state: GlobalState): number {
+    const size = (getPluginState(state) as {tickSize?: number} | undefined)?.tickSize;
+    return typeof size === 'number' ? size : DEFAULT_TICK_SIZE;
 }
 
 export function setPostStatus(store: Store<GlobalState>, postId: string, entry: StatusEntry): void {
@@ -269,6 +275,46 @@ export async function fetchPostStatuses(postIds: string[]): Promise<StatusRespon
 
     const results = await Promise.all(batches.map(fetchStatusBatch));
     return results.flat();
+}
+
+// The tick size is an instance-wide setting, so it is fetched once at startup
+// (and on reconnect, in case it changed while the client was away) rather than
+// per post. A bad or missing value falls back to the default.
+export async function loadPluginConfig(store: Store<GlobalState>): Promise<void> {
+    const response = await fetch(`${getPluginApiBase()}/config`, {
+        credentials: 'include',
+        headers: getRequestHeaders('GET'),
+    });
+
+    if (!response.ok) {
+        return;
+    }
+
+    let tickSize = DEFAULT_TICK_SIZE;
+    try {
+        const data = await response.json() as {tick_size?: unknown};
+        if (typeof data?.tick_size === 'number' && Number.isFinite(data.tick_size)) {
+            tickSize = Math.min(MAX_TICK_SIZE, Math.max(MIN_TICK_SIZE, Math.round(data.tick_size)));
+        }
+    } catch {
+        return;
+    }
+
+    store.dispatch({type: SET_TICK_SIZE, data: tickSize});
+    applyTickSizeToDocument(tickSize);
+}
+
+// Spacing is done in CSS, which needs the size as a custom property. Deriving
+// the insets from it keeps the ticks proportionally spaced at any size instead
+// of hugging the corner when large.
+export function applyTickSizeToDocument(tickSize: number): void {
+    if (typeof document === 'undefined' || !document.body) {
+        return;
+    }
+
+    document.body.style.setProperty('--message-status-tick-size', `${tickSize}px`);
+    document.body.style.setProperty('--message-status-inset-x', `${Math.round(tickSize * 0.45)}px`);
+    document.body.style.setProperty('--message-status-inset-y', `${Math.round(tickSize * 0.25)}px`);
 }
 
 export async function hydratePostStatuses(store: Store<GlobalState>, postIds: string[]): Promise<void> {

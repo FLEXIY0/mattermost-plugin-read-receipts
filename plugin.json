@@ -2,7 +2,7 @@
     "id": "com.github.mattermost-message-status",
     "name": "Message Status",
     "description": "Shows delivery and read receipts (checkmarks) on your messages, similar to WhatsApp and Telegram.",
-    "version": "1.1.0",
+    "version": "1.2.1",
     "min_server_version": "9.0.0",
     "server": {
         "executables": {
@@ -16,6 +16,15 @@
     "settings_schema": {
         "header": "Message Status shows delivery and read receipts on your own messages.",
         "footer": "",
-        "settings": []
+        "settings": [
+            {
+                "key": "TickSize",
+                "display_name": "Checkmark size (pixels)",
+                "type": "number",
+                "help_text": "Height of the checkmarks on your messages. Between 8 and 20; smaller is more compact. Anything outside that range falls back to the default. Users need to reload the web client to pick up a change.",
+                "default": 11,
+                "placeholder": "11"
+            }
+        ]
     }
 }

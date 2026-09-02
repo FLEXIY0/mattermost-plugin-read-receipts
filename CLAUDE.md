@@ -76,11 +76,24 @@ workflow artifacts without publishing anything.
 On reconnect/focus/channel switch the webapp re-hydrates via
 `GET /api/v1/status?post_ids=...` because websocket events are lossy.
 
+That flow only exists in the webapp, so a recipient on the mobile app never
+reports a read. `dmread.go` closes that gap for **direct messages only**: on a
+status request the server compares the other participant's
+`ChannelMember.LastViewedAt` against the post's `CreatedAt`, which every client
+updates because it drives the unread badges. There is no hook for it, so it is
+pull-based and the author sees the tick on their next hydration. `dmViewLookup`
+caches the channel and member lookups per request — without it a screenful of
+one conversation would be two API calls per post. It is confined to DMs on
+purpose: in a channel it would mean loading every member on every request, and
+"opened the channel" says much less about a specific message.
+
 ### Server (`server/`)
 
 - `plugin.go` — hooks, KV persistence, `markDelivered`/`markRead`, websocket publish
 - `http.go` — router, auth middleware, the two HTTP handlers
 - `api.go` — `PostStatus` model and its invariants (`addReader`, `DerivedStatus`)
+- `dmread.go` — inferring DM reads from channel view times, for mobile clients
+- `config.go` — the `TickSize` setting, normalized and served to the webapp
 
 Persistence is one KV entry per post, keyed `status_<postID>`, written with
 `KVSetWithOptions{Atomic: true, OldValue: ..., ExpireInSeconds: ...}`. **All
@@ -88,8 +101,9 @@ writes are compare-and-set**: an in-process mutex would not be correct because
 Mattermost runs one plugin process per cluster node, and both `markDelivered`
 and `markRead` can touch the same post concurrently from different nodes.
 `getStatus` therefore returns the raw bytes alongside the decoded struct — the
-raw value is the CAS token for the next write. `markRead` retries the read/
-modify/write loop `casAttempts` times.
+raw value is the CAS token for the next write. `appendReader` retries the read/
+modify/write loop `casAttempts` times and is shared by `markRead` and the
+direct-message sync.
 
 `MessageHasBeenPosted` runs for **every post on the server**, so it must stay
 cheap: it tries an insert-only CAS first and only falls back to a read when that
@@ -107,8 +121,24 @@ DOM of the host app**:
   `portalHosts` map that must be pruned as posts leave the store, or it pins
   detached DOM nodes for the tab's lifetime.
 - `PostReadTracker` runs an `IntersectionObserver` over *other people's* posts
-  and calls the read API at `READ_THRESHOLD` visibility. DMs and posts in an
-  open thread bypass the visibility check (`shouldForceReadPost`).
+  and calls the read API at `READ_THRESHOLD` visibility. DMs and everything in
+  an open thread — its root included — bypass the visibility check
+  (`shouldForceReadPost`).
+
+Three things about that path are easy to reintroduce as bugs:
+
+- With a thread open the same post is on screen **twice** (`post_<id>` in the
+  centre, `rhsPost_<id>` in the sidebar). `getPostElements` returns every copy
+  and the tracker marks the post read if *any* of them is visible; resolving a
+  single element instead means reading in one pane is judged by where the other
+  pane is scrolled.
+- `isElementVisible` measures against `min(post height, viewport height)`.
+  Dividing by the post height alone makes the threshold unreachable for posts
+  taller than the viewport — a 2000px post in an 800px viewport tops out at
+  0.4 — so long messages and tall images were never marked read.
+- The `IntersectionObserver` is only a **trigger**; `tryMarkPostRead` makes the
+  decision. Gating on `entry.intersectionRatio` reintroduces the same
+  tall-post blind spot, because that ratio is relative to the element too.
 
 Both depend on Mattermost's internal DOM (`post_<id>`, `rhsPost_<id>`,
 `.post__body`) and internal Redux shape (`state.views.rhs`, `state.views.threads`,
@@ -139,6 +169,9 @@ author. When touching the API, preserve these:
   generic message; `AppError` carries storage detail.
 - `publishStatusUpdate` broadcasts with `WebsocketBroadcast{UserId: AuthorID}`.
   Never widen this to a channel broadcast.
+- `syncDirectMessageRead` runs only *after* the `AuthorID == requester` check in
+  `handleGetStatuses`, so a caller can never use it to probe someone else's
+  channel view times. Keep it on that side of the check.
 - Post IDs from clients go through `model.IsValidId` before reaching a KV key.
 - Bounds that exist to stop unbounded growth: `maxReadBy` (per-post readers),
   `maxStatusPostIDs` (KV reads per request), `maxReadBodyBytes`,
@@ -147,6 +180,26 @@ author. When touching the API, preserve these:
 Hook and HTTP entry points `defer p.recoverPanic(...)`. `MessageHasBeenPosted`
 sits on the message-posting path, so a panic there would take the plugin process
 down with it.
+
+## Configuration
+
+The only setting is `TickSize`, declared in the `settings_schema` of **both**
+`plugin.json` and `plugin.full.json` — the two manifests ship in different
+bundles, so a setting added to one and not the other silently disappears
+depending on which bundle was installed.
+
+Mattermost's `settings_schema` has no slider type (`bool`, `dropdown`,
+`generated`, `radio`, `text`, `number`, `longtext`, `username`, `custom`), so
+this is a `number` field. The System Console does not enforce a range on it,
+which is why `configuration.normalized()` clamps out-of-range values back to
+the default — an admin typing `0` must not break rendering instance-wide.
+
+The webapp reads it from `GET /api/v1/config` at startup and on reconnect (the
+value is instance-wide, so per-post fetching would be waste), stores it in the
+plugin reducer, and mirrors it onto `<body>` as `--message-status-tick-size` /
+`--message-status-inset-*` so the stylesheet can scale the spacing with it.
+Bounds are duplicated in `server/config.go` and `webapp/src/constants.ts`; keep
+them in sync.
 
 ## Styling
 
@@ -168,4 +221,7 @@ from delivered to read; change one viewBox and you have to change the other.
 
 The tick container is `position: absolute` inside a `position: relative` post
 body so ticks never change post height. Changing that will shift the layout of
-every message in the app.
+every message in the app. For the same reason there is deliberately **no**
+`padding-right` reserved on `.post__body`: it would re-wrap every message the
+user has ever sent. The ticks overlap the bottom-right corner instead, and a
+`margin-left` keeps them off the last word.

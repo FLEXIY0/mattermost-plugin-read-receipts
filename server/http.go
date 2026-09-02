@@ -25,6 +25,7 @@ func (p *Plugin) initRouter() *mux.Router {
 	api := router.PathPrefix("/api/v1").Subrouter()
 	api.HandleFunc("/read", p.handleMarkRead).Methods(http.MethodPost)
 	api.HandleFunc("/status", p.handleGetStatuses).Methods(http.MethodGet)
+	api.HandleFunc("/config", p.handleGetConfig).Methods(http.MethodGet)
 
 	return router
 }
@@ -94,6 +95,7 @@ func (p *Plugin) handleGetStatuses(w http.ResponseWriter, r *http.Request) {
 
 	results := make([]statusResponse, 0, len(postIDs))
 	seen := make(map[string]struct{}, len(postIDs))
+	dmReads := newDMViewLookup(p)
 
 	for _, postID := range postIDs {
 		postID = strings.TrimSpace(postID)
@@ -120,6 +122,10 @@ func (p *Plugin) handleGetStatuses(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		// Recipients on mobile never call the read endpoint, so for DMs fall
+		// back to their channel view time.
+		status = p.syncDirectMessageRead(status, dmReads)
+
 		results = append(results, statusResponse{
 			PostID: status.PostID,
 			Status: status.DerivedStatus(),
@@ -128,6 +134,11 @@ func (p *Plugin) handleGetStatuses(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]any{"statuses": results})
+}
+
+// handleGetConfig exposes the cosmetic settings the webapp needs to render.
+func (p *Plugin) handleGetConfig(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, map[string]any{"tick_size": p.getConfiguration().TickSize})
 }
 
 func writeJSON(w http.ResponseWriter, value any) {

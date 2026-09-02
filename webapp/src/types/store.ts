@@ -7,6 +7,7 @@ export type StatusEntry = {
 
 export type PluginState = {
     statuses: Record<string, StatusEntry>;
+    tickSize: number;
 };
 
 export const PLUGIN_STATE_KEY = 'plugins-com.github.mattermost-message-status';
@@ -15,6 +16,7 @@ export const PLUGIN_STATE_KEY = 'plugins-com.github.mattermost-message-status';
 // stays discriminated.
 export const SET_STATUS = `PLUGIN_${PLUGIN_STATE_KEY}_SET_STATUS` as const;
 export const SET_STATUSES = `PLUGIN_${PLUGIN_STATE_KEY}_SET_STATUSES` as const;
+export const SET_TICK_SIZE = `PLUGIN_${PLUGIN_STATE_KEY}_SET_TICK_SIZE` as const;
 
 export type StatusUpdatePayload = {
     post_id: string;

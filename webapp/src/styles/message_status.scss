@@ -14,12 +14,15 @@ $message-status-color-rgb: var(--center-channel-color-rgb, 63, 67, 80);
         position: relative;
     }
 
-    // Ticks are taken out of the flow so they never change post height.
+    // Ticks are taken out of the flow so they never change post height. The
+    // insets are set on <body> from the TickSize setting (see
+    // applyTickSizeToDocument) so the gap stays proportional at any size; the
+    // fallbacks match the default 11px glyph.
     .message-status-ticks-attachment,
     .message-status-ticks-portal-host {
         position: absolute;
-        right: 2px;
-        bottom: 2px;
+        right: var(--message-status-inset-x, 5px);
+        bottom: var(--message-status-inset-y, 3px);
         z-index: 1;
         display: inline-flex;
         align-items: center;
@@ -38,6 +41,10 @@ $message-status-color-rgb: var(--center-channel-color-rgb, 63, 67, 80);
         line-height: 1;
         cursor: default;
         user-select: none;
+
+        // Keeps the glyph clear of the last word when a line runs long, without
+        // reserving space in the text flow (which would re-wrap every message).
+        margin-left: var(--message-status-inset-x, 5px);
 
         // The SVG strokes use `currentColor`, so this drives both ticks.
         &--delivered {
