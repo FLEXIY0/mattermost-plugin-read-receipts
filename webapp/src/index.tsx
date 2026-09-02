@@ -15,7 +15,7 @@ import type {StatusUpdatePayload} from './types/store';
 import {getOwnEligiblePostIds} from './utils/posts';
 
 type PluginRegistry = {
-    registerReducer: (reducer: typeof reducer) => void;
+    registerReducer: (pluginReducer: typeof reducer) => void;
     registerRootComponent: (component: React.ComponentType) => string;
     registerWebSocketEventHandler: (event: string, handler: (msg: {data?: StatusUpdatePayload}) => void) => void;
     registerReconnectHandler: (handler: () => void) => void;

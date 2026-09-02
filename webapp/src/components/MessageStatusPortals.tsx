@@ -15,6 +15,19 @@ type Props = {
 const portalHosts = new Map<string, HTMLElement>();
 const PORTAL_RETRY_MS = [250, 1000, 3000, 5000];
 
+// Hosts for posts that have scrolled out of the store would otherwise pin
+// detached DOM nodes for the lifetime of the tab.
+function pruneStalePortalHosts(livePostIds: Set<string>): void {
+    portalHosts.forEach((host, postId) => {
+        if (livePostIds.has(postId) && host.isConnected) {
+            return;
+        }
+
+        host.remove();
+        portalHosts.delete(postId);
+    });
+}
+
 function getOrCreatePortalHost(postId: string): HTMLElement | null {
     const anchor = getPostTickAnchor(postId);
     if (!anchor) {
@@ -40,6 +53,8 @@ function getOrCreatePortalHost(postId: string): HTMLElement | null {
 
 function syncPortalHosts(postIds: string[]): boolean {
     let changed = false;
+
+    pruneStalePortalHosts(new Set(postIds));
 
     postIds.forEach((postId) => {
         const previousHost = portalHosts.get(postId);
@@ -83,18 +98,31 @@ const MessageStatusPortals: React.FC<Props> = ({store}) => {
 
         const retryTimers = PORTAL_RETRY_MS.map((delay) => window.setTimeout(refresh, delay));
 
+        // scroll fires far more often than a frame; coalescing keeps the DOM
+        // lookups in hasMissingPortalHosts off the scroll critical path.
+        let frameId = 0;
         const resync = () => {
-            if (hasMissingPortalHosts(ownPostIds)) {
-                refresh();
+            if (frameId) {
+                return;
             }
+
+            frameId = window.requestAnimationFrame(() => {
+                frameId = 0;
+                if (hasMissingPortalHosts(ownPostIds)) {
+                    refresh();
+                }
+            });
         };
 
-        window.addEventListener('scroll', resync, true);
-        window.addEventListener('resize', resync);
+        window.addEventListener('scroll', resync, {capture: true, passive: true});
+        window.addEventListener('resize', resync, {passive: true});
 
         return () => {
             retryTimers.forEach((timerId) => window.clearTimeout(timerId));
-            window.removeEventListener('scroll', resync, true);
+            if (frameId) {
+                window.cancelAnimationFrame(frameId);
+            }
+            window.removeEventListener('scroll', resync, {capture: true});
             window.removeEventListener('resize', resync);
         };
     }, [ownPostIdsKey]);

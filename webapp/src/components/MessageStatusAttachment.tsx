@@ -30,7 +30,10 @@ function resolvePost(state: GlobalState, postProp?: Post, postId?: string): Post
 
 const MessageStatusAttachment: React.FC<Props> = ({postId, post: postProp, store}) => {
     const currentUserId = useSelector((state: GlobalState) => state.entities.users.currentUserId);
-    const locale = useSelector((state: GlobalState) => state.entities.i18n?.locale || 'en');
+    const locale = useSelector((state: GlobalState) => {
+        const {currentUserId, profiles} = state.entities.users;
+        return profiles[currentUserId]?.locale || 'en';
+    });
     const post = useSelector((state: GlobalState) => resolvePost(state, postProp, postId));
     const channel = useSelector((state: GlobalState) => {
         const channelId = post?.channel_id;

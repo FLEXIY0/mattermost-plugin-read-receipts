@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -79,6 +80,7 @@ func createBundle(sourceDir, outputPath, pluginID string) error {
 		header.Name = name
 		header.Mode = fileMode(name, info)
 		header.Format = tar.FormatUSTAR
+		normalizeHeader(header)
 
 		if entry.IsDir() {
 			header.Name = strings.TrimSuffix(header.Name, "/") + "/"
@@ -102,6 +104,20 @@ func createBundle(sourceDir, outputPath, pluginID string) error {
 		_, err = io.Copy(tw, file)
 		return err
 	})
+}
+
+// normalizeHeader strips everything USTAR cannot represent and everything that
+// would make the bundle depend on the machine that built it. Notably, modern Go
+// fills in AccessTime/ChangeTime from the filesystem, which USTAR cannot encode
+// at all and which makes tw.WriteHeader fail outright.
+func normalizeHeader(header *tar.Header) {
+	header.ModTime = header.ModTime.Truncate(time.Second)
+	header.AccessTime = time.Time{}
+	header.ChangeTime = time.Time{}
+	header.Uid = 0
+	header.Gid = 0
+	header.Uname = ""
+	header.Gname = ""
 }
 
 func fileMode(name string, info os.FileInfo) int64 {

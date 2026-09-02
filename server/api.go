@@ -1,11 +1,13 @@
 package main
 
-import (
-	"encoding/json"
-	"net/http"
-	"strings"
+const (
+	// maxReadBy caps how many reader IDs are retained per post. Without a cap a
+	// single post in a large channel would grow its KV entry (and every
+	// websocket payload derived from it) without bound.
+	maxReadBy = 50
 )
 
+// PostStatus is the per-post record persisted in the plugin KV store.
 type PostStatus struct {
 	PostID    string   `json:"post_id"`
 	ChannelID string   `json:"channel_id"`
@@ -25,79 +27,33 @@ func (s *PostStatus) DerivedStatus() string {
 	return ""
 }
 
+func (s *PostStatus) hasReader(userID string) bool {
+	for _, id := range s.ReadBy {
+		if id == userID {
+			return true
+		}
+	}
+	return false
+}
+
+// addReader records a reader and reports whether the record actually changed.
+// Once maxReadBy readers are stored the post is already "read", so further
+// readers are dropped rather than allowed to grow the entry.
+func (s *PostStatus) addReader(userID string) bool {
+	if s.hasReader(userID) || len(s.ReadBy) >= maxReadBy {
+		return false
+	}
+
+	s.ReadBy = append(s.ReadBy, userID)
+	return true
+}
+
 type readRequest struct {
 	PostID string `json:"post_id"`
 }
 
 type statusResponse struct {
-	PostID string `json:"post_id"`
-	Status string `json:"status"`
+	PostID string   `json:"post_id"`
+	Status string   `json:"status"`
 	ReadBy []string `json:"read_by"`
-}
-
-func (p *Plugin) handleMarkRead(w http.ResponseWriter, r *http.Request) {
-	var req readRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	if req.PostID == "" {
-		http.Error(w, "post_id is required", http.StatusBadRequest)
-		return
-	}
-
-	readerID := r.Header.Get("Mattermost-User-ID")
-	status, appErr := p.markRead(req.PostID, readerID)
-	if appErr != nil {
-		http.Error(w, appErr.Error(), appErr.StatusCode)
-		return
-	}
-
-	if status == nil {
-		writeJSON(w, map[string]string{"status": "ignored"})
-		return
-	}
-
-	writeJSON(w, statusResponse{
-		PostID: status.PostID,
-		Status: status.DerivedStatus(),
-		ReadBy: status.ReadBy,
-	})
-}
-
-func (p *Plugin) handleGetStatuses(w http.ResponseWriter, r *http.Request) {
-	postIDsParam := r.URL.Query().Get("post_ids")
-	if postIDsParam == "" {
-		http.Error(w, "post_ids is required", http.StatusBadRequest)
-		return
-	}
-
-	postIDs := strings.Split(postIDsParam, ",")
-	results := make([]statusResponse, 0, len(postIDs))
-
-	for _, postID := range postIDs {
-		postID = strings.TrimSpace(postID)
-		if postID == "" {
-			continue
-		}
-
-		status, appErr := p.getStatus(postID)
-		if appErr != nil {
-			http.Error(w, appErr.Error(), appErr.StatusCode)
-			return
-		}
-
-		if status == nil {
-			continue
-		}
-
-		results = append(results, statusResponse{
-			PostID: status.PostID,
-			Status: status.DerivedStatus(),
-			ReadBy: status.ReadBy,
-		})
-	}
-
-	writeJSON(w, map[string]any{"statuses": results})
 }

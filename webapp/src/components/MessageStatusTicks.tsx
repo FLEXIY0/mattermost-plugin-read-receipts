@@ -8,8 +8,11 @@ type Props = {
     title: string;
 };
 
+// Both states are drawn in the same muted grey, Telegram-style: the signal is
+// one tick vs. two, not a colour change. The actual colour comes from the
+// stylesheet (`currentColor`) so it follows the active Mattermost theme.
 const MessageStatusTicks: React.FC<Props> = ({status, label, title}) => {
-    const color = status === 'read' ? '#22C55E' : '#9CA3AF';
+    const isRead = status === 'read';
 
     return (
         <span
@@ -19,18 +22,19 @@ const MessageStatusTicks: React.FC<Props> = ({status, label, title}) => {
         >
             <svg
                 className='message-status-ticks__icon'
-                width={status === 'read' ? TICK_SIZE + 4 : TICK_SIZE}
+                width={isRead ? TICK_SIZE + 4 : TICK_SIZE}
                 height={TICK_SIZE}
-                viewBox={status === 'read' ? '0 0 18 12' : '0 0 12 12'}
+                viewBox={isRead ? '0 0 18 12' : '0 0 12 12'}
                 role='img'
                 aria-hidden='true'
+                focusable='false'
             >
-                {status === 'read' ? (
+                {isRead ? (
                     <>
                         <path
                             d='M1.5 6.2L3.8 8.5L7.2 3.5'
                             fill='none'
-                            stroke={color}
+                            stroke='currentColor'
                             strokeWidth='1.6'
                             strokeLinecap='round'
                             strokeLinejoin='round'
@@ -38,7 +42,7 @@ const MessageStatusTicks: React.FC<Props> = ({status, label, title}) => {
                         <path
                             d='M6.5 6.2L8.8 8.5L16 1.5'
                             fill='none'
-                            stroke={color}
+                            stroke='currentColor'
                             strokeWidth='1.6'
                             strokeLinecap='round'
                             strokeLinejoin='round'
@@ -48,7 +52,7 @@ const MessageStatusTicks: React.FC<Props> = ({status, label, title}) => {
                     <path
                         d='M1.5 6.2L4.2 9L10.5 2.5'
                         fill='none'
-                        stroke={color}
+                        stroke='currentColor'
                         strokeWidth='1.6'
                         strokeLinecap='round'
                         strokeLinejoin='round'
