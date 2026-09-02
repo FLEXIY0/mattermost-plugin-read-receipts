@@ -182,14 +182,22 @@ func (p *Plugin) writeStatus(oldValue []byte, status *PostStatus) (bool, *model.
 	})
 }
 
-func (p *Plugin) markDelivered(post *model.Post) {
-	status := &PostStatus{
+// statusForPost builds the record a post starts life with. CreatedAt is kept
+// so the direct-message sync can compare a post against a channel view time
+// without loading the post again.
+func statusForPost(post *model.Post) *PostStatus {
+	return &PostStatus{
 		PostID:    post.Id,
 		ChannelID: post.ChannelId,
 		AuthorID:  post.UserId,
+		CreatedAt: post.CreateAt,
 		Delivered: true,
 		ReadBy:    []string{},
 	}
+}
+
+func (p *Plugin) markDelivered(post *model.Post) {
+	status := statusForPost(post)
 
 	// A brand new post almost never has a stored status, so try the insert-only
 	// write first and pay for a read only when it loses the race.
@@ -237,6 +245,15 @@ func (p *Plugin) markRead(postID, readerID string) (*PostStatus, *model.AppError
 		return nil, nil
 	}
 
+	return p.appendReader(postID, readerID, func() *PostStatus {
+		return statusForPost(post)
+	})
+}
+
+// appendReader runs the read/modify/write loop that records one reader against
+// a post. seed supplies a record when nothing is stored yet; if it returns nil
+// the post is left alone. Callers are responsible for authorizing the reader.
+func (p *Plugin) appendReader(postID, readerID string, seed func() *PostStatus) (*PostStatus, *model.AppError) {
 	for attempt := 0; attempt < casAttempts; attempt++ {
 		raw, status, appErr := p.getStatus(postID)
 		if appErr != nil {
@@ -244,18 +261,12 @@ func (p *Plugin) markRead(postID, readerID string) (*PostStatus, *model.AppError
 		}
 
 		if status == nil {
-			status = &PostStatus{
-				PostID:    post.Id,
-				ChannelID: post.ChannelId,
-				AuthorID:  post.UserId,
-				Delivered: true,
-				ReadBy:    []string{},
+			if seed == nil {
+				return nil, nil
 			}
-		} else {
-			// Trust the post, not the stored record, for ownership.
-			status.PostID = post.Id
-			status.ChannelID = post.ChannelId
-			status.AuthorID = post.UserId
+			if status = seed(); status == nil {
+				return nil, nil
+			}
 		}
 
 		if !status.addReader(readerID) {

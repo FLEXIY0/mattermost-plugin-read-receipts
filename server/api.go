@@ -12,6 +12,7 @@ type PostStatus struct {
 	PostID    string   `json:"post_id"`
 	ChannelID string   `json:"channel_id"`
 	AuthorID  string   `json:"author_id"`
+	CreatedAt int64    `json:"created_at"`
 	Delivered bool     `json:"delivered"`
 	ReadBy    []string `json:"read_by"`
 	UpdatedAt int64    `json:"updated_at"`

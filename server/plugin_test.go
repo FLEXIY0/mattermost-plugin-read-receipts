@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/mattermost/mattermost/server/public/model"
@@ -123,4 +124,14 @@ func TestPostStatusAddReaderIsCapped(t *testing.T) {
 	if len(status.ReadBy) != maxReadBy {
 		t.Errorf("ReadBy = %d entries, want %d", len(status.ReadBy), maxReadBy)
 	}
+}
+
+func mustMarshal(t *testing.T, status *PostStatus) []byte {
+	t.Helper()
+
+	data, err := json.Marshal(status)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return data
 }

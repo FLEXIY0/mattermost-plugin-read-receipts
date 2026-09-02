@@ -94,6 +94,7 @@ func (p *Plugin) handleGetStatuses(w http.ResponseWriter, r *http.Request) {
 
 	results := make([]statusResponse, 0, len(postIDs))
 	seen := make(map[string]struct{}, len(postIDs))
+	dmReads := newDMViewLookup(p)
 
 	for _, postID := range postIDs {
 		postID = strings.TrimSpace(postID)
@@ -119,6 +120,10 @@ func (p *Plugin) handleGetStatuses(w http.ResponseWriter, r *http.Request) {
 		if status == nil || status.AuthorID != requesterID {
 			continue
 		}
+
+		// Recipients on mobile never call the read endpoint, so for DMs fall
+		// back to their channel view time.
+		status = p.syncDirectMessageRead(status, dmReads)
 
 		results = append(results, statusResponse{
 			PostID: status.PostID,

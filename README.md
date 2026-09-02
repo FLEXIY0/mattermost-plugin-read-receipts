@@ -42,7 +42,7 @@ Build the bundle, then upload it:
 
 ```bash
 make dist
-mmctl plugin upload dist/com.github.mattermost-message-status-1.1.0.tar.gz
+mmctl plugin upload dist/com.github.mattermost-message-status-1.2.0.tar.gz
 mmctl plugin enable com.github.mattermost-message-status
 ```
 
@@ -62,9 +62,15 @@ also carries the macOS and Windows binaries (larger; may need a higher
 ## What it does and does not track
 
 - **Delivered** is set by a server hook, so it is accurate for every client.
-- **Read** is detected only in the **web client**. The mobile and desktop apps
-  do not load webapp plugins, so a recipient reading there will not flip the
-  second tick.
+- **Read in a direct message** works from any client, including the mobile apps.
+  Those never load webapp plugins, so instead the server compares the
+  recipient's channel view time against the post. The author sees the second
+  tick on their next refresh (window focus, reconnect or channel switch) rather
+  than instantly, and it means "opened the conversation after this message
+  arrived" rather than "scrolled this exact message into view".
+- **Read in a channel** is detected only in the **web client**, where the
+  recipient actually scrolls the post into view. If your team reads mostly on
+  phones, a single tick on a channel post does not mean unread.
 - System messages, deleted posts, and webhook/bot posts are ignored.
 - Receipts are stored for **30 days**, then expire; a post older than that
   falls back to showing **Delivered**.
@@ -94,7 +100,7 @@ To cut a release, bump the version in `plugin.json`, `plugin.full.json`,
 `Makefile` and `webapp/src/manifest.ts`, then tag:
 
 ```bash
-git tag v1.1.0 && git push origin v1.1.0
+git tag v1.2.0 && git push origin v1.2.0
 ```
 
 CI verifies that all four files agree with the tag, runs the checks, and

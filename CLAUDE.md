@@ -76,11 +76,23 @@ workflow artifacts without publishing anything.
 On reconnect/focus/channel switch the webapp re-hydrates via
 `GET /api/v1/status?post_ids=...` because websocket events are lossy.
 
+That flow only exists in the webapp, so a recipient on the mobile app never
+reports a read. `dmread.go` closes that gap for **direct messages only**: on a
+status request the server compares the other participant's
+`ChannelMember.LastViewedAt` against the post's `CreatedAt`, which every client
+updates because it drives the unread badges. There is no hook for it, so it is
+pull-based and the author sees the tick on their next hydration. `dmViewLookup`
+caches the channel and member lookups per request — without it a screenful of
+one conversation would be two API calls per post. It is confined to DMs on
+purpose: in a channel it would mean loading every member on every request, and
+"opened the channel" says much less about a specific message.
+
 ### Server (`server/`)
 
 - `plugin.go` — hooks, KV persistence, `markDelivered`/`markRead`, websocket publish
 - `http.go` — router, auth middleware, the two HTTP handlers
 - `api.go` — `PostStatus` model and its invariants (`addReader`, `DerivedStatus`)
+- `dmread.go` — inferring DM reads from channel view times, for mobile clients
 
 Persistence is one KV entry per post, keyed `status_<postID>`, written with
 `KVSetWithOptions{Atomic: true, OldValue: ..., ExpireInSeconds: ...}`. **All
@@ -88,8 +100,9 @@ writes are compare-and-set**: an in-process mutex would not be correct because
 Mattermost runs one plugin process per cluster node, and both `markDelivered`
 and `markRead` can touch the same post concurrently from different nodes.
 `getStatus` therefore returns the raw bytes alongside the decoded struct — the
-raw value is the CAS token for the next write. `markRead` retries the read/
-modify/write loop `casAttempts` times.
+raw value is the CAS token for the next write. `appendReader` retries the read/
+modify/write loop `casAttempts` times and is shared by `markRead` and the
+direct-message sync.
 
 `MessageHasBeenPosted` runs for **every post on the server**, so it must stay
 cheap: it tries an insert-only CAS first and only falls back to a read when that
@@ -139,6 +152,9 @@ author. When touching the API, preserve these:
   generic message; `AppError` carries storage detail.
 - `publishStatusUpdate` broadcasts with `WebsocketBroadcast{UserId: AuthorID}`.
   Never widen this to a channel broadcast.
+- `syncDirectMessageRead` runs only *after* the `AuthorID == requester` check in
+  `handleGetStatuses`, so a caller can never use it to probe someone else's
+  channel view times. Keep it on that side of the check.
 - Post IDs from clients go through `model.IsValidId` before reaching a KV key.
 - Bounds that exist to stop unbounded growth: `maxReadBy` (per-post readers),
   `maxStatusPostIDs` (KV reads per request), `maxReadBodyBytes`,
