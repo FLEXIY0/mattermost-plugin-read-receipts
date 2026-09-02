@@ -8,8 +8,30 @@ type Props = {
     title: string;
 };
 
+// Geometry traced from Material's "done_all" glyph, which is the shape people
+// recognise as a read receipt: the read state is two overlapping checks, and the
+// rear one is interrupted where the front one crosses it rather than simply
+// sitting beside it. The coordinates below are stroke centrelines in that
+// icon's 24-unit grid (Material ships it as a filled outline; these are the
+// midlines of its 2-unit-wide strokes), so the glyph stays crisp at any size
+// instead of being scaled from a filled path.
+const CHECK_SINGLE = 'M1.12 12.71L6 17.59L17.29 6.3';
+const CHECK_REAR_STUB = 'M1.12 12.71L6.71 18.3';
+const CHECK_REAR_ARM = 'M10.96 12.64L17.3 6.3';
+const CHECK_FRONT = 'M6.78 12.71L11.66 17.59L22.95 6.3';
+
+// Both glyphs sit on the same baseline, so the viewBoxes crop the same 15-unit
+// band and differ only in width. That keeps the two states vertically aligned
+// when a post flips from delivered to read.
+const VIEWBOX_Y = 5;
+const VIEWBOX_HEIGHT = 15;
+const VIEWBOX_WIDTH = {delivered: 18.3, read: 24};
+const STROKE_WIDTH = 2;
+
 const MessageStatusTicks: React.FC<Props> = ({status, label, title}) => {
-    const color = status === 'read' ? '#22C55E' : '#9CA3AF';
+    const isRead = status === 'read';
+    const paths = isRead ? [CHECK_REAR_STUB, CHECK_REAR_ARM, CHECK_FRONT] : [CHECK_SINGLE];
+    const viewBoxWidth = VIEWBOX_WIDTH[status];
 
     return (
         <span
@@ -19,41 +41,24 @@ const MessageStatusTicks: React.FC<Props> = ({status, label, title}) => {
         >
             <svg
                 className='message-status-ticks__icon'
-                width={status === 'read' ? TICK_SIZE + 4 : TICK_SIZE}
+                width={(TICK_SIZE * viewBoxWidth) / VIEWBOX_HEIGHT}
                 height={TICK_SIZE}
-                viewBox={status === 'read' ? '0 0 18 12' : '0 0 12 12'}
+                viewBox={`0 ${VIEWBOX_Y} ${viewBoxWidth} ${VIEWBOX_HEIGHT}`}
                 role='img'
                 aria-hidden='true'
+                focusable='false'
             >
-                {status === 'read' ? (
-                    <>
-                        <path
-                            d='M1.5 6.2L3.8 8.5L7.2 3.5'
-                            fill='none'
-                            stroke={color}
-                            strokeWidth='1.6'
-                            strokeLinecap='round'
-                            strokeLinejoin='round'
-                        />
-                        <path
-                            d='M6.5 6.2L8.8 8.5L16 1.5'
-                            fill='none'
-                            stroke={color}
-                            strokeWidth='1.6'
-                            strokeLinecap='round'
-                            strokeLinejoin='round'
-                        />
-                    </>
-                ) : (
+                {paths.map((d) => (
                     <path
-                        d='M1.5 6.2L4.2 9L10.5 2.5'
+                        key={d}
+                        d={d}
                         fill='none'
-                        stroke={color}
-                        strokeWidth='1.6'
+                        stroke='currentColor'
+                        strokeWidth={STROKE_WIDTH}
                         strokeLinecap='round'
                         strokeLinejoin='round'
                     />
-                )}
+                ))}
             </svg>
         </span>
     );

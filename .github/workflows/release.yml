@@ -1,0 +1,163 @@
+name: Release
+
+# Tag the release commit and push the tag:
+#   git tag v1.1.0 && git push origin v1.1.0
+#
+# The tag is the source of truth for the version, and the job refuses to publish
+# unless every place the version is duplicated already agrees with it.
+on:
+  push:
+    tags:
+      - 'v*'
+  # Builds the same bundles and uploads them as workflow artifacts without
+  # publishing a release, so the pipeline can be exercised before tagging.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PLUGIN_ID: com.github.mattermost-message-status
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Resolve version
+        id: version
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(jq -r .version plugin.json)"
+          fi
+          echo "version=${version}" >>"${GITHUB_OUTPUT}"
+          echo "Releasing version ${version}"
+
+      # The version lives in four files and Mattermost will either refuse the
+      # upgrade or serve a stale webapp bundle if they drift apart, so this is a
+      # hard gate rather than a warning.
+      - name: Check the version is consistent
+        run: |
+          set -euo pipefail
+          version='${{ steps.version.outputs.version }}'
+          status=0
+
+          check() {
+            if [ "$2" != "${version}" ]; then
+              echo "::error file=$1::$1 declares '$2', expected '${version}'"
+              status=1
+            fi
+          }
+
+          check plugin.json          "$(jq -r .version plugin.json)"
+          check plugin.full.json     "$(jq -r .version plugin.full.json)"
+          check Makefile             "$(sed -n 's/^PLUGIN_VERSION := //p' Makefile)"
+          check webapp/src/manifest.ts \
+            "$(sed -n "s/^[[:space:]]*version: '\(.*\)',$/\1/p" webapp/src/manifest.ts)"
+
+          if [ "${status}" -ne 0 ]; then
+            echo "Bump the version in every file above before tagging." >&2
+            exit 1
+          fi
+          echo "All four declarations agree on ${version}."
+
+      # Lockfile-exact install. `make webapp` runs `npm install`, which may
+      # resolve differently; seeding node_modules first makes the released
+      # bundle reproducible from package-lock.json.
+      - name: Install webapp dependencies
+        run: npm ci
+        working-directory: webapp
+
+      - name: Check
+        run: make check
+
+      # `make dist` and `make dist-all` write the same filename but different
+      # bundles (dist ships plugin.json / linux only, dist-all ships
+      # plugin.full.json / every platform), so each is moved aside before the
+      # next build overwrites it.
+      - name: Build the Linux bundle
+        run: |
+          set -euo pipefail
+          make dist
+          mv "dist/${PLUGIN_ID}-${VERSION}.tar.gz" "dist/${PLUGIN_ID}-${VERSION}-linux.tar.gz"
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Build the all-platforms bundle
+        run: make dist-all
+
+      - name: Checksums
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          sha256sum ./*.tar.gz | sed 's| \./| |' >SHA256SUMS
+          cat SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-bundles-${{ steps.version.outputs.version }}
+          path: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          # A tag like v1.2.0-rc1 is a prerelease.
+          prerelease=''
+          case "${VERSION}" in
+            *-*) prerelease='--prerelease' ;;
+          esac
+
+          cat >notes.md <<NOTES
+          ## Install
+
+          Download \`${PLUGIN_ID}-${VERSION}-linux.tar.gz\`, then:
+
+          \`\`\`bash
+          mmctl plugin upload ${PLUGIN_ID}-${VERSION}-linux.tar.gz
+          mmctl plugin enable ${PLUGIN_ID}
+          \`\`\`
+
+          Or upload it in **System Console → Plugins → Plugin Management** and
+          enable **Message Status**. Reload the web client afterwards.
+
+          | Asset | Contents |
+          | --- | --- |
+          | \`${PLUGIN_ID}-${VERSION}-linux.tar.gz\` | linux amd64 + arm64 — use this one |
+          | \`${PLUGIN_ID}-${VERSION}.tar.gz\` | also macOS + Windows; larger, may need a higher \`FileSettings.MaxFileSize\` |
+          | \`SHA256SUMS\` | checksums for both bundles |
+
+          NOTES
+
+          gh release create "${TAG}" \
+            --title "${TAG}" \
+            --notes-file notes.md \
+            --generate-notes \
+            ${prerelease} \
+            "dist/${PLUGIN_ID}-${VERSION}-linux.tar.gz" \
+            "dist/${PLUGIN_ID}-${VERSION}.tar.gz" \
+            dist/SHA256SUMS

@@ -1,132 +1,106 @@
 # Message Status — Mattermost Plugin
 
-WhatsApp/Telegram-style delivery and read receipts for your own messages: one gray checkmark for **Delivered**, two green checkmarks for **Read**.
+Telegram-style read receipts for your own messages.
 
-> **Disclaimer:** This plugin was created with AI assistance (Cursor). It is provided as-is, without warranty. **Use at your own discretion** — review the code and test in your environment before production use.
+| Ticks | Meaning |
+| :---: | ------- |
+| ✓ | **Delivered** — the message is stored on the server |
+| ✓✓ | **Read** — someone opened it in the web client |
 
-## Screenshots
+Both states are drawn in the same muted grey and follow the active Mattermost
+theme (light, dark or custom) — the signal is one tick vs. two, not a colour
+change. Ticks appear **only on posts you authored**, in the bottom-right corner
+of the message.
 
-Read receipts update in real time — green double ticks (✓✓) when the recipient opens your message in the web client.
+> **Disclaimer:** built with AI assistance and provided as-is, without warranty.
+> Review the code and test it in a staging environment before production use.
 
-![Read receipts in action](images/read-receipts.png)
+## Example
 
-Gray tick (✓) = **Delivered**. Green ticks (✓✓) = **Read**. Status is shown only on your own messages.
+Send a message in a DM or channel:
 
-![Delivered vs read](images/delivered-vs-read.png)
+```
+You:  Deploy is done, can you take a look?     ✓
+```
 
-Hover a tick to see who read your message.
+The single grey tick appears as soon as the server has stored the post. Once
+the recipient scrolls it into view in the web client, it becomes two ticks:
 
-![Read-by tooltip](images/read-by-tooltip.png)
+```
+You:  Deploy is done, can you take a look?     ✓✓
+```
 
-## Features
+Hover the ticks to see who has read the message.
 
-- **Delivered (✓)** — gray tick (`#9CA3AF`) when the message is persisted and available to recipients
-- **Read (✓✓)** — green ticks (`#22C55E`) when a recipient scrolls the message into view (~50% visible)
-- **Direct messages** — delivered when the other user is online; read when they view the message
-- **Channels / groups (MVP)** — delivered after create; read when any member views the post in the viewport
-- **Real-time updates** — server plugin broadcasts status changes over WebSocket
-- **Own messages only** — ticks appear only on posts you authored (not system, deleted, or ephemeral posts)
+<!-- Screenshots -->
+<!-- ![Delivered vs read](images/delivered-vs-read.png) -->
+<!-- ![Read-by tooltip](images/read-by-tooltip.png) -->
 
-## Limitations
+## Install
 
-- **Web client only** — checkmarks and read tracking run in the Mattermost webapp plugin. Mobile and desktop apps do not load plugin UI and do not call the read API.
-- **Delivered (✓)** works for all clients (server hook on post create).
-- **Read (✓✓)** is detected only when the recipient views the message in the **web client** (viewport / open thread).
+Build the bundle, then upload it:
+
+```bash
+make dist
+mmctl plugin upload dist/com.github.mattermost-message-status-1.1.0.tar.gz
+mmctl plugin enable com.github.mattermost-message-status
+```
+
+Or go to **System Console → Plugins → Plugin Management**, upload the same
+file and enable **Message Status**. Reload the web client afterwards
+(**Ctrl+F5**). There is nothing to configure.
+
+`make dist` builds a Linux-only bundle. Use `make dist-all` for a bundle that
+also carries the macOS and Windows binaries (larger; may need a higher
+`FileSettings.MaxFileSize`).
 
 ## Requirements
 
 - Mattermost **9.0+** (tested with 10.x)
-- Node.js **18+** and npm (webapp build)
-- Go **1.22+** (server plugin build)
+- Go **1.24+** and Node.js **18+** to build
 
-## Build
+## What it does and does not track
 
-```bash
-make dist
-```
+- **Delivered** is set by a server hook, so it is accurate for every client.
+- **Read** is detected only in the **web client**. The mobile and desktop apps
+  do not load webapp plugins, so a recipient reading there will not flip the
+  second tick.
+- System messages, deleted posts, and webhook/bot posts are ignored.
+- Receipts are stored for **30 days**, then expire; a post older than that
+  falls back to showing **Delivered**.
+- A post records at most **50** distinct readers.
 
-Creates a **Linux-only** bundle (~24 MB) using a Go bundler that writes a Mattermost-compatible tar structure:
+## Privacy
 
-```
-dist/com.github.mattermost-message-status-1.0.4.tar.gz
-```
+Read receipts tell the author who opened their message. Only the author can see
+them: the server returns a post's reader list solely to the account that wrote
+the post, and pushes updates over a websocket addressed to that user alone.
+Receipts are deleted when the post is deleted. There is no admin view and no
+way to query someone else's receipts.
 
-For all platforms (linux + darwin + windows, ~61 MB — may require raising `FileSettings.MaxFileSize`):
-
-```bash
-make dist-all
-```
-
-Other commands:
-
-```bash
-make webapp      # build webapp only
-make server-linux # build Linux server binaries only
-make clean       # remove build artifacts
-```
-
-## Install
-
-### System Console
-
-1. **System Console → Plugins → Plugin Management**
-2. Enable **Enable Plugins** and **Enable Uploads**
-3. Upload `dist/com.github.mattermost-message-status-1.0.4.tar.gz`
-4. Enable **Message Status**
-
-### mmctl
+## Development
 
 ```bash
-mmctl plugin upload dist/com.github.mattermost-message-status-1.0.4.tar.gz
-mmctl plugin enable com.github.mattermost-message-status
+make check    # go vet + go test + webapp typecheck
+make dist     # full build + bundle
+make clean    # remove build artifacts
 ```
 
-Reload the Mattermost web client after installation (**Ctrl+F5**).
+Run `make check` before committing — the webpack build strips TypeScript types
+without checking them, so `check-types` is the only thing that validates the
+webapp.
 
-## How it works
+To cut a release, bump the version in `plugin.json`, `plugin.full.json`,
+`Makefile` and `webapp/src/manifest.ts`, then tag:
 
-### Webapp
-
-- `MessageStatusPortals` — appends tick UI into each own post body (text, images, custom post types) at the bottom-right
-- `PostReadTracker` — uses `IntersectionObserver` to call the server when another user's post becomes visible
-- Redux store — caches per-post status for instant UI updates
-- WebSocket handler — listens for `status_updated` events from the server plugin
-
-### Server (Go)
-
-- **KV store** — persists delivery/read state per post
-- **HTTP API**
-  - `POST /plugins/com.github.mattermost-message-status/api/v1/read` — mark a post as read
-  - `GET /plugins/com.github.mattermost-message-status/api/v1/status?post_ids=...` — bulk status lookup
-- **WebSocket** — `PublishWebSocketEvent("status_updated", ...)` to the post author
-- **Hook** — `MessageHasBeenPosted` marks new user posts as delivered
-
-## Project layout
-
-```
-├── plugin.json
-├── Makefile
-├── images/           # README screenshots
-├── server/           # Go plugin (KV + API + WebSocket)
-│   ├── main.go
-│   ├── plugin.go
-│   └── api.go
-└── webapp/           # React/TypeScript client
-    └── src/
-        ├── components/
-        ├── actions/
-        ├── reducers/
-        └── styles/
+```bash
+git tag v1.1.0 && git push origin v1.1.0
 ```
 
-## Forking
+CI verifies that all four files agree with the tag, runs the checks, and
+publishes the bundles with checksums to the GitHub release.
 
-Update the plugin ID in:
-
-- `plugin.json`
-- `webapp/src/manifest.ts`
-- `webapp/src/types/store.ts` (`PLUGIN_STATE_KEY`)
-- `Makefile`
+See [CLAUDE.md](CLAUDE.md) for the architecture notes.
 
 ## License
 

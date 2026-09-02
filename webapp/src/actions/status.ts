@@ -164,8 +164,20 @@ function getCsrfToken(): string {
     return '';
 }
 
+// Mattermost can be served from a subpath (SiteURL like https://host/chat), in
+// which case the webapp exposes it as window.basename. Hard-coding a root-
+// relative URL would 404 on those installs.
+function getSiteBasePath(): string {
+    const {basename} = window as Window & {basename?: string};
+    if (typeof basename !== 'string' || basename === '/') {
+        return '';
+    }
+
+    return basename.replace(/\/+$/, '');
+}
+
 function getPluginApiBase(): string {
-    return `/plugins/${manifest.id}/api/v1`;
+    return `${getSiteBasePath()}/plugins/${encodeURIComponent(manifest.id)}/api/v1`;
 }
 
 function getRequestHeaders(method = 'GET'): Record<string, string> {
@@ -199,7 +211,7 @@ export async function markPostAsRead(postId: string): Promise<StatusResponse | n
     }
 
     try {
-        const data = await response.json() as Partial<StatusResponse> & {status?: string};
+        const data = await response.json() as Omit<Partial<StatusResponse>, 'status'> & {status?: string};
         if (data?.post_id && (data.status === 'delivered' || data.status === 'read')) {
             return {
                 post_id: data.post_id,
@@ -222,13 +234,12 @@ export async function markPostAsRead(postId: string): Promise<StatusResponse | n
     return null;
 }
 
-export async function fetchPostStatuses(postIds: string[]): Promise<StatusResponse[]> {
-    const uniqueIds = Array.from(new Set(postIds.filter(Boolean)));
-    if (uniqueIds.length === 0) {
-        return [];
-    }
+// The server caps how many ids one status request may carry, so batch rather
+// than let a long scrollback silently lose the tail of the list.
+const STATUS_BATCH_SIZE = 100;
 
-    const response = await fetch(`${getPluginApiBase()}/status?post_ids=${encodeURIComponent(uniqueIds.join(','))}`, {
+async function fetchStatusBatch(postIds: string[]): Promise<StatusResponse[]> {
+    const response = await fetch(`${getPluginApiBase()}/status?post_ids=${encodeURIComponent(postIds.join(','))}`, {
         credentials: 'include',
         headers: getRequestHeaders('GET'),
     });
@@ -237,8 +248,27 @@ export async function fetchPostStatuses(postIds: string[]): Promise<StatusRespon
         return [];
     }
 
-    const data = await response.json() as {statuses?: StatusResponse[]};
-    return data.statuses || [];
+    try {
+        const data = await response.json() as {statuses?: StatusResponse[]};
+        return Array.isArray(data?.statuses) ? data.statuses : [];
+    } catch {
+        return [];
+    }
+}
+
+export async function fetchPostStatuses(postIds: string[]): Promise<StatusResponse[]> {
+    const uniqueIds = Array.from(new Set(postIds.filter(Boolean)));
+    if (uniqueIds.length === 0) {
+        return [];
+    }
+
+    const batches: string[][] = [];
+    for (let i = 0; i < uniqueIds.length; i += STATUS_BATCH_SIZE) {
+        batches.push(uniqueIds.slice(i, i + STATUS_BATCH_SIZE));
+    }
+
+    const results = await Promise.all(batches.map(fetchStatusBatch));
+    return results.flat();
 }
 
 export async function hydratePostStatuses(store: Store<GlobalState>, postIds: string[]): Promise<void> {

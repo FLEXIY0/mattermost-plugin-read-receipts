@@ -1,5 +1,5 @@
 PLUGIN_ID := com.github.mattermost-message-status
-PLUGIN_VERSION := 1.0.4
+PLUGIN_VERSION := 1.1.0
 BUNDLE_NAME := $(PLUGIN_ID)-$(PLUGIN_VERSION).tar.gz
 
 GO ?= go
@@ -52,7 +52,7 @@ export LOCALAPPDATA := /c/Users/$(GO_USER)/AppData/Local
 endif
 endif
 
-.PHONY: all server server-linux webapp bundle bundle-all dist dist-all clean
+.PHONY: all server server-linux webapp bundle bundle-all dist dist-all check test check-types clean
 
 all: dist
 
@@ -71,6 +71,17 @@ server: server-linux
 webapp:
 	cd webapp && $(NPM) install
 	cd webapp && $(NPM) run build
+
+# Run before every commit: the webpack build strips types without checking them,
+# so `check-types` is the only thing that validates the webapp.
+check: test check-types
+
+test:
+	cd server && $(GO) vet ./...
+	cd server && $(GO) test ./...
+
+check-types:
+	cd webapp && $(NPM) run check-types
 
 bundle:
 	rm -rf dist/$(PLUGIN_ID)

@@ -11,12 +11,10 @@ export type PluginState = {
 
 export const PLUGIN_STATE_KEY = 'plugins-com.github.mattermost-message-status';
 
-export const SET_STATUS = pluginAction('SET_STATUS');
-export const SET_STATUSES = pluginAction('SET_STATUSES');
-
-function pluginAction(name: string): string {
-    return `PLUGIN_${PLUGIN_STATE_KEY}_${name}`;
-}
+// Declared as literal types (not plain `string`) so the reducer's action union
+// stays discriminated.
+export const SET_STATUS = `PLUGIN_${PLUGIN_STATE_KEY}_SET_STATUS` as const;
+export const SET_STATUSES = `PLUGIN_${PLUGIN_STATE_KEY}_SET_STATUSES` as const;
 
 export type StatusUpdatePayload = {
     post_id: string;

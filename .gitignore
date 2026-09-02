@@ -13,6 +13,7 @@ server/dist/
 
 # Go
 bin/
+server/mattermost-message-status
 
 # OS
 .DS_Store
