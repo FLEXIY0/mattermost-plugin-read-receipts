@@ -42,7 +42,7 @@ Build the bundle, then upload it:
 
 ```bash
 make dist
-mmctl plugin upload dist/com.github.mattermost-message-status-1.2.0.tar.gz
+mmctl plugin upload dist/com.github.mattermost-message-status-1.2.1.tar.gz
 mmctl plugin enable com.github.mattermost-message-status
 ```
 
@@ -108,7 +108,7 @@ To cut a release, bump the version in `plugin.json`, `plugin.full.json`,
 `Makefile` and `webapp/src/manifest.ts`, then tag:
 
 ```bash
-git tag v1.2.0 && git push origin v1.2.0
+git tag v1.2.1 && git push origin v1.2.1
 ```
 
 CI verifies that all four files agree with the tag, runs the checks, and

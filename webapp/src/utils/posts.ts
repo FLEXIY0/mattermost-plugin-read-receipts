@@ -145,13 +145,38 @@ export function getUserDisplayName(state: {entities: {users: {profiles: Record<s
     return user.username || userId;
 }
 
+// Every place Mattermost may have rendered this post. The same post is on
+// screen twice whenever a thread is open — `post_<id>` in the centre channel and
+// `rhsPost_<id>` in the sidebar — and reading it in one pane says nothing about
+// where the other pane happens to be scrolled.
+export function getPostElements(postId: string): HTMLElement[] {
+    const elements: HTMLElement[] = [];
+
+    const add = (element: HTMLElement | null) => {
+        if (element && !elements.includes(element)) {
+            elements.push(element);
+        }
+    };
+
+    // Kept as getElementById so the ids need no CSS escaping.
+    add(document.getElementById(`post_${postId}`));
+    add(document.getElementById(`rhsPost_${postId}`));
+
+    [
+        `.ThreadViewer [data-postid="${postId}"]`,
+        `.ThreadViewer [data-post-id="${postId}"]`,
+        `[data-postid="${postId}"]`,
+        `[data-post-id="${postId}"]`,
+    ].forEach((selector) => {
+        document.querySelectorAll<HTMLElement>(selector).forEach(add);
+    });
+
+    return elements;
+}
+
+// The single element the ticks are portalled into; the centre channel wins.
 export function getPostElement(postId: string): HTMLElement | null {
-    return document.getElementById(`post_${postId}`) ||
-        document.getElementById(`rhsPost_${postId}`) ||
-        document.querySelector(`.ThreadViewer [data-postid="${postId}"]`) ||
-        document.querySelector(`.ThreadViewer [data-post-id="${postId}"]`) ||
-        document.querySelector(`[data-postid="${postId}"]`) ||
-        document.querySelector(`[data-post-id="${postId}"]`);
+    return getPostElements(postId)[0] || null;
 }
 
 export function getPostTickAnchor(postId: string): HTMLElement | null {
@@ -223,8 +248,16 @@ export function isPostInOpenThread(post: Post, rootId?: string): boolean {
 }
 
 export function shouldForceReadPost(post: Post, channel: Channel | undefined, openThreadRootId?: string): boolean {
+    // Anything in the thread the reader has open counts, including its root.
+    // Previously only replies did, so opening someone's message as a thread and
+    // answering it left their post unread unless the centre channel happened to
+    // still be scrolled to it.
+    if (isPostInOpenThread(post, openThreadRootId)) {
+        return true;
+    }
+
     if (isThreadReply(post)) {
-        return isPostInOpenThread(post, openThreadRootId);
+        return false;
     }
 
     if (isDirectChannel(channel)) {

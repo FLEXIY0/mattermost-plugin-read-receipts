@@ -1,5 +1,5 @@
 export default {
     id: 'com.github.mattermost-message-status',
     name: 'Message Status',
-    version: '1.2.0',
+    version: '1.2.1',
 };

@@ -121,8 +121,24 @@ DOM of the host app**:
   `portalHosts` map that must be pruned as posts leave the store, or it pins
   detached DOM nodes for the tab's lifetime.
 - `PostReadTracker` runs an `IntersectionObserver` over *other people's* posts
-  and calls the read API at `READ_THRESHOLD` visibility. DMs and posts in an
-  open thread bypass the visibility check (`shouldForceReadPost`).
+  and calls the read API at `READ_THRESHOLD` visibility. DMs and everything in
+  an open thread — its root included — bypass the visibility check
+  (`shouldForceReadPost`).
+
+Three things about that path are easy to reintroduce as bugs:
+
+- With a thread open the same post is on screen **twice** (`post_<id>` in the
+  centre, `rhsPost_<id>` in the sidebar). `getPostElements` returns every copy
+  and the tracker marks the post read if *any* of them is visible; resolving a
+  single element instead means reading in one pane is judged by where the other
+  pane is scrolled.
+- `isElementVisible` measures against `min(post height, viewport height)`.
+  Dividing by the post height alone makes the threshold unreachable for posts
+  taller than the viewport — a 2000px post in an 800px viewport tops out at
+  0.4 — so long messages and tall images were never marked read.
+- The `IntersectionObserver` is only a **trigger**; `tryMarkPostRead` makes the
+  decision. Gating on `entry.intersectionRatio` reintroduces the same
+  tall-post blind spot, because that ratio is relative to the element too.
 
 Both depend on Mattermost's internal DOM (`post_<id>`, `rhsPost_<id>`,
 `.post__body`) and internal Redux shape (`state.views.rhs`, `state.views.threads`,

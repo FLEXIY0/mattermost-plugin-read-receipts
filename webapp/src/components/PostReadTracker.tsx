@@ -10,6 +10,7 @@ import {hydratePostStatuses, markPostAsRead, setOptimisticDelivered} from '../ac
 import {READ_THRESHOLD} from '../constants';
 import {
     getPostElement,
+    getPostElements,
     getReadablePosts,
     getSelectedThreadRootId,
     getThreadPostIds,
@@ -124,9 +125,14 @@ const PostReadTracker: React.FC<Props> = ({store}) => {
         const requiresVisibility = !forceRead;
 
         if (requiresVisibility) {
-            const element = getPostElement(postId) ||
-                (post.root_id ? getPostElement(post.root_id) : null);
-            if (!element || !isElementVisible(element, READ_THRESHOLD)) {
+            // Visible in *any* pane counts: with a thread open the same post is
+            // rendered twice, and only one of them needs to be on screen.
+            const elements = getPostElements(postId);
+            if (elements.length === 0 && post.root_id) {
+                elements.push(...getPostElements(post.root_id));
+            }
+
+            if (!elements.some((element) => isElementVisible(element, READ_THRESHOLD))) {
                 return;
             }
         }
@@ -228,7 +234,7 @@ const PostReadTracker: React.FC<Props> = ({store}) => {
 
         observerRef.current = new IntersectionObserver((entries) => {
             entries.forEach((entry) => {
-                if (!entry.isIntersecting || entry.intersectionRatio < READ_THRESHOLD) {
+                if (!entry.isIntersecting) {
                     return;
                 }
 
@@ -242,7 +248,9 @@ const PostReadTracker: React.FC<Props> = ({store}) => {
                 }
             });
         }, {
-            threshold: [READ_THRESHOLD],
+            // A post taller than the viewport can never reach a 0.5 ratio, so
+            // the observer only wakes us and tryMarkPostRead makes the call.
+            threshold: [0, READ_THRESHOLD],
         });
 
         const observePosts = () => {
@@ -253,12 +261,13 @@ const PostReadTracker: React.FC<Props> = ({store}) => {
                     return;
                 }
 
-                const element = getPostElement(post.id);
-                if (!element || observedPosts.has(post.id)) {
+                if (observedPosts.has(post.id)) {
                     return;
                 }
 
-                observerRef.current?.observe(element);
+                getPostElements(post.id).forEach((element) => {
+                    observerRef.current?.observe(element);
+                });
                 tryMarkPostRead(post.id, postChannel);
             });
         };
