@@ -9,9 +9,22 @@ on:
   push:
     tags:
       - 'v*'
+      # A bare version tag works too, so `1.2.1` is not silently ignored.
+      - '[0-9]*'
+  # Publishing a release in the web UI creates the tag and the release
+  # together. That normally also fires the tag push above, but this makes the
+  # web flow work either way; the publish step below is idempotent, so a double
+  # run just re-uploads the same files.
+  release:
+    types: [published]
   # Builds the same bundles and uploads them as workflow artifacts without
   # publishing a release, so the pipeline can be exercised before tagging.
   workflow_dispatch:
+
+# Never let two runs for the same tag upload assets at the same time.
+concurrency:
+  group: release-${{ github.event.release.tag_name || github.ref_name }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -39,15 +52,27 @@ jobs:
 
       - name: Resolve version
         id: version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            version="${GITHUB_REF_NAME#v}"
+
+          case "${GITHUB_EVENT_NAME}" in
+            release) tag="${RELEASE_TAG}" ;;
+            push)    tag="${GITHUB_REF_NAME}" ;;
+            *)       tag="" ;;
+          esac
+
+          if [ -n "${tag}" ]; then
+            # Accepts both v1.2.1 and 1.2.1.
+            version="${tag#v}"
           else
             version="$(jq -r .version plugin.json)"
           fi
+
+          echo "tag=${tag}" >>"${GITHUB_OUTPUT}"
           echo "version=${version}" >>"${GITHUB_OUTPUT}"
-          echo "Releasing version ${version}"
+          echo "Building version ${version}${tag:+ for tag ${tag}}"
 
       # The version lives in four files and Mattermost will either refuse the
       # upgrade or serve a stale webapp bundle if they drift apart, so this is a
@@ -118,13 +143,29 @@ jobs:
           if-no-files-found: error
 
       - name: Publish the release
-        if: github.ref_type == 'tag'
+        if: steps.version.outputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
+
+          assets=(
+            "dist/${PLUGIN_ID}-${VERSION}-linux.tar.gz"
+            "dist/${PLUGIN_ID}-${VERSION}.tar.gz"
+            dist/SHA256SUMS
+          )
+
+          # Creating a release from the web UI makes the tag and the release in
+          # one step, so by the time this runs the release can already exist.
+          # Attach the bundles to it instead of failing, and leave the notes
+          # whoever wrote them alone.
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists; attaching the bundles to it."
+            gh release upload "${TAG}" --clobber "${assets[@]}"
+            exit 0
+          fi
 
           # A tag like v1.2.0-rc1 is a prerelease.
           prerelease=''
@@ -158,6 +199,4 @@ jobs:
             --notes-file notes.md \
             --generate-notes \
             ${prerelease} \
-            "dist/${PLUGIN_ID}-${VERSION}-linux.tar.gz" \
-            "dist/${PLUGIN_ID}-${VERSION}.tar.gz" \
-            dist/SHA256SUMS
+            "${assets[@]}"

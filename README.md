@@ -105,14 +105,13 @@ without checking them, so `check-types` is the only thing that validates the
 webapp.
 
 To cut a release, bump the version in `plugin.json`, `plugin.full.json`,
-`Makefile` and `webapp/src/manifest.ts`, then tag:
+`Makefile` and `webapp/src/manifest.ts`, then either:
 
-```bash
-git tag v1.2.1 && git push origin v1.2.1
-```
+- push a tag — `git tag v1.2.1 && git push origin v1.2.1`, or
+- use **Releases → Draft a new release** on GitHub and create the tag there.
 
-CI verifies that all four files agree with the tag, runs the checks, and
-publishes the bundles with checksums to the GitHub release.
+Either way CI verifies that all four files agree with the tag, runs the checks,
+and attaches the bundles with checksums to the release.
 
 See [CLAUDE.md](CLAUDE.md) for the architecture notes.
 

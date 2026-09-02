@@ -46,10 +46,18 @@ The plugin **ID** is duplicated in `plugin.json`, `plugin.full.json`,
 
 ## Releases
 
-`.github/workflows/release.yml` fires on a `v*` tag. It re-checks that all four
-version declarations equal the tag (minus the `v`) and **fails the release** if
+`.github/workflows/release.yml` fires on a version tag (`v1.2.1` or a bare
+`1.2.1`) and on a release published from the web UI. It re-checks that all four
+version declarations equal the tag (minus any `v`) and **fails the release** if
 any of them drifted, so the bump above is enforced rather than remembered. It
 then runs `make check`, builds both bundles and publishes them.
+
+Publishing a release in the web UI creates the tag and the release in one step,
+so the job can start with the release already existing. The publish step
+therefore uploads to an existing release (leaving its notes alone) and only
+creates one when there is none — `gh release create` would otherwise fail
+outright. That also makes re-runs safe. Both triggers can fire for the same
+web-UI release, so a `concurrency` group keeps two runs from uploading at once.
 
 The two bundles are built from the same `dist/` filename, so the workflow moves
 the first aside before building the second:
