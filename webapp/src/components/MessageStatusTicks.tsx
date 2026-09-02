@@ -1,11 +1,10 @@
 import React from 'react';
 
-import {TICK_SIZE} from '../constants';
-
 type Props = {
     status: 'delivered' | 'read';
     label: string;
     title: string;
+    size: number;
 };
 
 // Geometry traced from Material's "done_all" glyph, which is the shape people
@@ -28,7 +27,7 @@ const VIEWBOX_HEIGHT = 15;
 const VIEWBOX_WIDTH = {delivered: 18.3, read: 24};
 const STROKE_WIDTH = 2;
 
-const MessageStatusTicks: React.FC<Props> = ({status, label, title}) => {
+const MessageStatusTicks: React.FC<Props> = ({status, label, title, size}) => {
     const isRead = status === 'read';
     const paths = isRead ? [CHECK_REAR_STUB, CHECK_REAR_ARM, CHECK_FRONT] : [CHECK_SINGLE];
     const viewBoxWidth = VIEWBOX_WIDTH[status];
@@ -41,8 +40,8 @@ const MessageStatusTicks: React.FC<Props> = ({status, label, title}) => {
         >
             <svg
                 className='message-status-ticks__icon'
-                width={(TICK_SIZE * viewBoxWidth) / VIEWBOX_HEIGHT}
-                height={TICK_SIZE}
+                width={(size * viewBoxWidth) / VIEWBOX_HEIGHT}
+                height={size}
                 viewBox={`0 ${VIEWBOX_Y} ${viewBoxWidth} ${VIEWBOX_HEIGHT}`}
                 role='img'
                 aria-hidden='true'

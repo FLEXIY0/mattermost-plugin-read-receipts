@@ -5,6 +5,7 @@ import type {Store} from 'redux';
 import type {GlobalState} from '@mattermost/types/store';
 import type {Post} from '@mattermost/types/posts';
 
+import {getTickSize} from '../actions/status';
 import {formatReadByLabel, getTranslationsForLocale} from '../i18n';
 import {usePostStatus} from '../hooks/usePostStatus';
 import {getOtherUserIdInDM, getUserDisplayName, isDirectChannel, isEligiblePost, isOwnPost} from '../utils/posts';
@@ -41,6 +42,7 @@ const MessageStatusAttachment: React.FC<Props> = ({postId, post: postProp, store
     });
     const state = useSelector((value: GlobalState) => value);
     const statusEntry = usePostStatus(store, post?.id);
+    const tickSize = useSelector(getTickSize);
 
     if (!post || !currentUserId || !isEligiblePost(post) || !isOwnPost(post, currentUserId)) {
         return null;
@@ -78,6 +80,7 @@ const MessageStatusAttachment: React.FC<Props> = ({postId, post: postProp, store
                 status={status}
                 label={status === 'read' ? readLabel : deliveredLabel}
                 title={tooltip}
+                size={tickSize}
             />
         </div>
     );

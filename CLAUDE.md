@@ -93,6 +93,7 @@ purpose: in a channel it would mean loading every member on every request, and
 - `http.go` — router, auth middleware, the two HTTP handlers
 - `api.go` — `PostStatus` model and its invariants (`addReader`, `DerivedStatus`)
 - `dmread.go` — inferring DM reads from channel view times, for mobile clients
+- `config.go` — the `TickSize` setting, normalized and served to the webapp
 
 Persistence is one KV entry per post, keyed `status_<postID>`, written with
 `KVSetWithOptions{Atomic: true, OldValue: ..., ExpireInSeconds: ...}`. **All
@@ -164,6 +165,26 @@ Hook and HTTP entry points `defer p.recoverPanic(...)`. `MessageHasBeenPosted`
 sits on the message-posting path, so a panic there would take the plugin process
 down with it.
 
+## Configuration
+
+The only setting is `TickSize`, declared in the `settings_schema` of **both**
+`plugin.json` and `plugin.full.json` — the two manifests ship in different
+bundles, so a setting added to one and not the other silently disappears
+depending on which bundle was installed.
+
+Mattermost's `settings_schema` has no slider type (`bool`, `dropdown`,
+`generated`, `radio`, `text`, `number`, `longtext`, `username`, `custom`), so
+this is a `number` field. The System Console does not enforce a range on it,
+which is why `configuration.normalized()` clamps out-of-range values back to
+the default — an admin typing `0` must not break rendering instance-wide.
+
+The webapp reads it from `GET /api/v1/config` at startup and on reconnect (the
+value is instance-wide, so per-post fetching would be waste), stores it in the
+plugin reducer, and mirrors it onto `<body>` as `--message-status-tick-size` /
+`--message-status-inset-*` so the stylesheet can scale the spacing with it.
+Bounds are duplicated in `server/config.go` and `webapp/src/constants.ts`; keep
+them in sync.
+
 ## Styling
 
 Tick colour comes from `rgba(var(--center-channel-color-rgb), <alpha>)` in
@@ -184,4 +205,7 @@ from delivered to read; change one viewBox and you have to change the other.
 
 The tick container is `position: absolute` inside a `position: relative` post
 body so ticks never change post height. Changing that will shift the layout of
-every message in the app.
+every message in the app. For the same reason there is deliberately **no**
+`padding-right` reserved on `.post__body`: it would re-wrap every message the
+user has ever sent. The ticks overlap the bottom-right corner instead, and a
+`margin-left` keeps them off the last word.

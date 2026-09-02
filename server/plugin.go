@@ -35,6 +35,10 @@ type Plugin struct {
 	// router is published atomically: OnActivate runs concurrently with the
 	// first requests the server may route to us.
 	router atomic.Pointer[mux.Router]
+
+	// config is replaced wholesale on every OnConfigurationChange, which can
+	// land while requests are in flight.
+	config atomic.Pointer[configuration]
 }
 
 func (p *Plugin) OnActivate() error {

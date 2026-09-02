@@ -8,7 +8,7 @@ import reducer from './reducers';
 import MessageStatusPortals from './components/MessageStatusPortals';
 import MessageStatusStyles from './components/MessageStatusStyles';
 import PostReadTracker from './components/PostReadTracker';
-import {applyStatusUpdate, hydratePostStatuses, setOptimisticDelivered} from './actions/status';
+import {applyStatusUpdate, hydratePostStatuses, loadPluginConfig, setOptimisticDelivered} from './actions/status';
 import {STATUS_UPDATED_EVENT} from './constants';
 import {getTranslationsForLocale} from './i18n';
 import type {StatusUpdatePayload} from './types/store';
@@ -39,6 +39,8 @@ export default class Plugin {
     public initialize(registry: PluginRegistry, store: Store<GlobalState>): void {
         registry.registerReducer(reducer);
         registry.registerTranslations(getTranslationsForLocale);
+
+        void loadPluginConfig(store);
         registry.registerRootComponent(MessageStatusStyles);
         registry.registerRootComponent(() => <PostReadTracker store={store}/>);
         registry.registerRootComponent(() => <MessageStatusPortals store={store}/>);
@@ -48,6 +50,8 @@ export default class Plugin {
         });
 
         registry.registerReconnectHandler(() => {
+            void loadPluginConfig(store);
+
             const state = store.getState();
             const postIds = getOwnEligiblePostIds(state);
             if (postIds.length === 0) {

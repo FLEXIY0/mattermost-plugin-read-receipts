@@ -48,7 +48,15 @@ mmctl plugin enable com.github.mattermost-message-status
 
 Or go to **System Console → Plugins → Plugin Management**, upload the same
 file and enable **Message Status**. Reload the web client afterwards
-(**Ctrl+F5**). There is nothing to configure.
+(**Ctrl+F5**).
+
+## Settings
+
+**System Console → Plugins → Message Status** has one setting:
+
+- **Checkmark size (pixels)** — height of the ticks, 8–20, default 11. Spacing
+  scales with it. Values outside the range fall back to the default. Users pick
+  up a change on their next reload.
 
 `make dist` builds a Linux-only bundle. Use `make dist-all` for a bundle that
 also carries the macOS and Windows binaries (larger; may need a higher

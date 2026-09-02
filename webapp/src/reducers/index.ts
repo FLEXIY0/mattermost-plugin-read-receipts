@@ -1,8 +1,10 @@
+import {DEFAULT_TICK_SIZE} from '../constants';
 import type {PluginState, StatusEntry} from '../types/store';
-import {SET_STATUS, SET_STATUSES} from '../types/store';
+import {SET_STATUS, SET_STATUSES, SET_TICK_SIZE} from '../types/store';
 
 const initialState: PluginState = {
     statuses: {},
+    tickSize: DEFAULT_TICK_SIZE,
 };
 
 type SetStatusAction = {
@@ -15,7 +17,12 @@ type SetStatusesAction = {
     data: Record<string, StatusEntry>;
 };
 
-type PluginAction = SetStatusAction | SetStatusesAction;
+type SetTickSizeAction = {
+    type: typeof SET_TICK_SIZE;
+    data: number;
+};
+
+type PluginAction = SetStatusAction | SetStatusesAction | SetTickSizeAction;
 
 export default function reducer(state: PluginState = initialState, action: PluginAction): PluginState {
     switch (action.type) {
@@ -36,6 +43,11 @@ export default function reducer(state: PluginState = initialState, action: Plugi
                 ...state.statuses,
                 ...action.data,
             },
+        };
+    case SET_TICK_SIZE:
+        return {
+            ...state,
+            tickSize: action.data,
         };
     default:
         return state;
