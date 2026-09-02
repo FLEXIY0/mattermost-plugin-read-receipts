@@ -44,6 +44,23 @@ The plugin **ID** is duplicated in `plugin.json`, `plugin.full.json`,
 `Makefile`, `webapp/src/manifest.ts` and `webapp/src/types/store.ts`
 (`PLUGIN_STATE_KEY`, which also derives the websocket event name).
 
+## Releases
+
+`.github/workflows/release.yml` fires on a `v*` tag. It re-checks that all four
+version declarations equal the tag (minus the `v`) and **fails the release** if
+any of them drifted, so the bump above is enforced rather than remembered. It
+then runs `make check`, builds both bundles and publishes them.
+
+The two bundles are built from the same `dist/` filename, so the workflow moves
+the first aside before building the second:
+
+- `<id>-<version>-linux.tar.gz` — `make dist`, ships `plugin.json`, linux only
+- `<id>-<version>.tar.gz` — `make dist-all`, ships `plugin.full.json`, all platforms
+
+A tag containing a hyphen (`v1.2.0-rc1`) publishes as a prerelease. Running the
+workflow manually (`workflow_dispatch`) builds and uploads the bundles as
+workflow artifacts without publishing anything.
+
 ## Architecture
 
 ### Data flow

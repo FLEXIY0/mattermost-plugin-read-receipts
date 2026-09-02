@@ -90,6 +90,16 @@ Run `make check` before committing — the webpack build strips TypeScript types
 without checking them, so `check-types` is the only thing that validates the
 webapp.
 
+To cut a release, bump the version in `plugin.json`, `plugin.full.json`,
+`Makefile` and `webapp/src/manifest.ts`, then tag:
+
+```bash
+git tag v1.1.0 && git push origin v1.1.0
+```
+
+CI verifies that all four files agree with the tag, runs the checks, and
+publishes the bundles with checksums to the GitHub release.
+
 See [CLAUDE.md](CLAUDE.md) for the architecture notes.
 
 ## License
