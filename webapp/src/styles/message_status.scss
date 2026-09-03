@@ -61,11 +61,40 @@ $message-status-color-rgb: var(--center-channel-color-rgb, 63, 67, 80);
         }
     }
 
+    // Over an image the theme's text colour means nothing: a light tick vanishes
+    // on a light photo and a dark one on a dark photo, whichever theme is
+    // active. Posts that end in a picture or a link preview therefore get a
+    // scrim and fixed white ticks, the way chat apps mark receipts over media.
+    .message-status-ticks-attachment[data-over-media='true'] {
+        padding: 2px var(--message-status-inset-y, 3px);
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.5);
+
+        .message-status-ticks--delivered,
+        .message-status-ticks--read {
+            color: rgba(255, 255, 255, 0.95);
+        }
+
+        // The scrim already separates the ticks from the picture.
+        .message-status-ticks {
+            margin-left: 0;
+        }
+    }
+
     // Respect users who ask for reduced transparency/contrast tweaks.
     @media (prefers-contrast: more) {
         .message-status-ticks--delivered,
         .message-status-ticks--read {
             color: rgba($message-status-color-rgb, 1);
+        }
+
+        .message-status-ticks-attachment[data-over-media='true'] {
+            background: rgba(0, 0, 0, 0.75);
+
+            .message-status-ticks--delivered,
+            .message-status-ticks--read {
+                color: #fff;
+            }
         }
     }
 }

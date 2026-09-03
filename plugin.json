@@ -2,7 +2,7 @@
     "id": "com.github.mattermost-message-status",
     "name": "Message Status",
     "description": "Shows delivery and read receipts (checkmarks) on your messages, similar to WhatsApp and Telegram.",
-    "version": "1.2.1",
+    "version": "1.4.0",
     "min_server_version": "9.0.0",
     "server": {
         "executables": {
@@ -21,9 +21,16 @@
                 "key": "TickSize",
                 "display_name": "Checkmark size (pixels)",
                 "type": "number",
-                "help_text": "Height of the checkmarks on your messages. Between 8 and 20; smaller is more compact. Anything outside that range falls back to the default. Users need to reload the web client to pick up a change.",
+                "help_text": "Height of the checkmarks on your messages. Between 6 and 20; smaller is more compact. Anything outside that range falls back to the default. Users need to reload the web client to pick up a change.",
                 "default": 11,
                 "placeholder": "11"
+            },
+            {
+                "key": "ChannelReadSync",
+                "display_name": "Infer read receipts in channels from channel views",
+                "type": "bool",
+                "help_text": "Mobile and desktop apps cannot report reads, so without this a message read on a phone stays on one tick in channels. With it on, a member counts as having read a channel message once they open the channel after it arrived — which is weaker than actually scrolling to it. Direct messages always use this and are unaffected by this setting. Channels with more than 50 members are skipped for performance.",
+                "default": true
             }
         ]
     }

@@ -42,7 +42,7 @@ Build the bundle, then upload it:
 
 ```bash
 make dist
-mmctl plugin upload dist/com.github.mattermost-message-status-1.2.1.tar.gz
+mmctl plugin upload dist/com.github.mattermost-message-status-1.4.0.tar.gz
 mmctl plugin enable com.github.mattermost-message-status
 ```
 
@@ -54,9 +54,19 @@ file and enable **Message Status**. Reload the web client afterwards
 
 **System Console → Plugins → Message Status** has one setting:
 
-- **Checkmark size (pixels)** — height of the ticks, 8–20, default 11. Spacing
-  scales with it. Values outside the range fall back to the default. Users pick
+- **Checkmark size (pixels)** — height of the ticks, 6–20, default 11. Spacing
+  scales with it, and the stroke thickens at the smallest sizes so the glyph
+  stays legible. Values outside the range fall back to the default. Users pick
   up a change on their next reload.
+
+- **Infer read receipts in channels from channel views** — default on. Turn it
+  off to keep channel receipts limited to people who actually scrolled the post
+  into view in the web client. Direct messages are unaffected either way.
+
+On a post that ends in an image or a link preview the ticks sit on top of that
+picture, so there they are drawn white on a dark rounded scrim instead of in the
+theme colour — a theme-coloured tick is invisible over a photo of the wrong
+tone.
 
 `make dist` builds a Linux-only bundle. Use `make dist-all` for a bundle that
 also carries the macOS and Windows binaries (larger; may need a higher
@@ -69,16 +79,21 @@ also carries the macOS and Windows binaries (larger; may need a higher
 
 ## What it does and does not track
 
+- **Ticks are only drawn in the web client.** The mobile apps do not load
+  webapp plugins at all, so nobody sees receipts there. That is a Mattermost
+  limitation and cannot be worked around from a plugin.
+- **Reading on a phone does count**, though. Mobile and desktop apps never call
+  the read API, so the server instead compares each member's channel view time
+  against the post — every client updates that, because it drives the unread
+  badges. This is on for direct messages always, and for channels of up to 50
+  members unless an admin turns it off.
+- That inference means *"opened the conversation after this message arrived"*,
+  not *"scrolled this exact message into view"*. In a DM the difference is
+  small; in a channel it is wider, which is why it is a setting.
+- It is also not instant: there is no hook for channel views, so the author sees
+  the second tick on their next refresh — window focus, reconnect or a channel
+  switch.
 - **Delivered** is set by a server hook, so it is accurate for every client.
-- **Read in a direct message** works from any client, including the mobile apps.
-  Those never load webapp plugins, so instead the server compares the
-  recipient's channel view time against the post. The author sees the second
-  tick on their next refresh (window focus, reconnect or channel switch) rather
-  than instantly, and it means "opened the conversation after this message
-  arrived" rather than "scrolled this exact message into view".
-- **Read in a channel** is detected only in the **web client**, where the
-  recipient actually scrolls the post into view. If your team reads mostly on
-  phones, a single tick on a channel post does not mean unread.
 - System messages, deleted posts, and webhook/bot posts are ignored.
 - Receipts are stored for **30 days**, then expire; a post older than that
   falls back to showing **Delivered**.
@@ -105,14 +120,13 @@ without checking them, so `check-types` is the only thing that validates the
 webapp.
 
 To cut a release, bump the version in `plugin.json`, `plugin.full.json`,
-`Makefile` and `webapp/src/manifest.ts`, then tag:
+`Makefile` and `webapp/src/manifest.ts`, then either:
 
-```bash
-git tag v1.2.1 && git push origin v1.2.1
-```
+- push a tag — `git tag v1.4.0 && git push origin v1.4.0`, or
+- use **Releases → Draft a new release** on GitHub and create the tag there.
 
-CI verifies that all four files agree with the tag, runs the checks, and
-publishes the bundles with checksums to the GitHub release.
+Either way CI verifies that all four files agree with the tag, runs the checks,
+and attaches the bundles with checksums to the release.
 
 See [CLAUDE.md](CLAUDE.md) for the architecture notes.
 

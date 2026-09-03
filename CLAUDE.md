@@ -46,10 +46,18 @@ The plugin **ID** is duplicated in `plugin.json`, `plugin.full.json`,
 
 ## Releases
 
-`.github/workflows/release.yml` fires on a `v*` tag. It re-checks that all four
-version declarations equal the tag (minus the `v`) and **fails the release** if
+`.github/workflows/release.yml` fires on a version tag (`v1.2.1` or a bare
+`1.2.1`) and on a release published from the web UI. It re-checks that all four
+version declarations equal the tag (minus any `v`) and **fails the release** if
 any of them drifted, so the bump above is enforced rather than remembered. It
 then runs `make check`, builds both bundles and publishes them.
+
+Publishing a release in the web UI creates the tag and the release in one step,
+so the job can start with the release already existing. The publish step
+therefore uploads to an existing release (leaving its notes alone) and only
+creates one when there is none — `gh release create` would otherwise fail
+outright. That also makes re-runs safe. Both triggers can fire for the same
+web-UI release, so a `concurrency` group keeps two runs from uploading at once.
 
 The two bundles are built from the same `dist/` filename, so the workflow moves
 the first aside before building the second:
@@ -77,23 +85,33 @@ On reconnect/focus/channel switch the webapp re-hydrates via
 `GET /api/v1/status?post_ids=...` because websocket events are lossy.
 
 That flow only exists in the webapp, so a recipient on the mobile app never
-reports a read. `dmread.go` closes that gap for **direct messages only**: on a
-status request the server compares the other participant's
-`ChannelMember.LastViewedAt` against the post's `CreatedAt`, which every client
-updates because it drives the unread badges. There is no hook for it, so it is
-pull-based and the author sees the tick on their next hydration. `dmViewLookup`
-caches the channel and member lookups per request — without it a screenful of
-one conversation would be two API calls per post. It is confined to DMs on
-purpose: in a channel it would mean loading every member on every request, and
-"opened the channel" says much less about a specific message.
+reports a read. `viewread.go` closes that gap: on a status request the server
+compares each member's `ChannelMember.LastViewedAt` against the post's
+`CreatedAt`, which every client updates because it drives the unread badges.
+There is no hook for it, so it is pull-based and the author sees the tick on
+their next hydration.
+
+Two bounds keep that affordable and honest, and `viewLookup.eligible` is the
+only place they live:
+
+- **DMs are always synced**; channels only when `ChannelReadSync` is on and the
+  channel has at most `maxViewSyncMembers` members. `GetChannelStats` answers
+  the size before any membership is loaded, so a 5000-member channel costs one
+  call, not 5000 rows.
+- `viewLookup` caches per channel, including the *negative* answer — without
+  that a screenful of one conversation would re-decide, and re-fetch, per post.
+
+The readers a channel turns up go through `appendReaders` in **one**
+compare-and-set. One CAS per reader would be a dozen storage round trips for a
+single post.
 
 ### Server (`server/`)
 
 - `plugin.go` — hooks, KV persistence, `markDelivered`/`markRead`, websocket publish
 - `http.go` — router, auth middleware, the two HTTP handlers
 - `api.go` — `PostStatus` model and its invariants (`addReader`, `DerivedStatus`)
-- `dmread.go` — inferring DM reads from channel view times, for mobile clients
-- `config.go` — the `TickSize` setting, normalized and served to the webapp
+- `viewread.go` — inferring reads from channel view times, for mobile clients
+- `config.go` — the `TickSize` and `ChannelReadSync` settings
 
 Persistence is one KV entry per post, keyed `status_<postID>`, written with
 `KVSetWithOptions{Atomic: true, OldValue: ..., ExpireInSeconds: ...}`. **All
@@ -169,8 +187,8 @@ author. When touching the API, preserve these:
   generic message; `AppError` carries storage detail.
 - `publishStatusUpdate` broadcasts with `WebsocketBroadcast{UserId: AuthorID}`.
   Never widen this to a channel broadcast.
-- `syncDirectMessageRead` runs only *after* the `AuthorID == requester` check in
-  `handleGetStatuses`, so a caller can never use it to probe someone else's
+- `syncViewedReads` runs only *after* the `AuthorID == requester` check in
+  `handleGetStatuses`, so a caller can never use it to probe other people's
   channel view times. Keep it on that side of the check.
 - Post IDs from clients go through `model.IsValidId` before reaching a KV key.
 - Bounds that exist to stop unbounded growth: `maxReadBy` (per-post readers),
@@ -183,8 +201,8 @@ down with it.
 
 ## Configuration
 
-The only setting is `TickSize`, declared in the `settings_schema` of **both**
-`plugin.json` and `plugin.full.json` — the two manifests ship in different
+The settings are `TickSize` and `ChannelReadSync`, declared in the
+`settings_schema` of **both** `plugin.json` and `plugin.full.json` — the two manifests ship in different
 bundles, so a setting added to one and not the other silently disappears
 depending on which bundle was installed.
 
@@ -194,7 +212,11 @@ this is a `number` field. The System Console does not enforce a range on it,
 which is why `configuration.normalized()` clamps out-of-range values back to
 the default — an admin typing `0` must not break rendering instance-wide.
 
-The webapp reads it from `GET /api/v1/config` at startup and on reconnect (the
+`ChannelReadSync` is a `*bool`, not a `bool`, on purpose: an install upgraded
+from before the setting existed has no stored value, and a plain bool would
+read that as `false` and silently disable the feature. Nil means on.
+
+The webapp reads `TickSize` from `GET /api/v1/config` at startup and on reconnect (the
 value is instance-wide, so per-post fetching would be waste), stores it in the
 plugin reducer, and mirrors it onto `<body>` as `--message-status-tick-size` /
 `--message-status-inset-*` so the stylesheet can scale the spacing with it.
@@ -210,6 +232,18 @@ hard-coded hex colours** (the pre-1.1 build used `#22C55E` green for read, which
 breaks on dark themes and is not the intended Telegram look). Delivered and read
 share one hue and differ only in alpha — the meaning is carried by one tick vs.
 two.
+
+`strokeWidth()` widens the stroke below ~8px. The stroke is 2 units of a
+15-unit viewBox, so at 6px it renders as 0.8 device px — a grey smudge rather
+than a tick; the floor keeps roughly a pixel of ink at any size.
+
+Posts whose ticks land on a picture (`postHasMedia`: attachments,
+`metadata.files`, `metadata.images`, image embeds) get
+`data-over-media='true'`, which swaps the theme colour for white on a dark
+scrim. The theme's text colour is meaningless over a photo — light ticks vanish
+on a light image and dark ones on a dark image, and which happens has nothing
+to do with the active theme — so this is the one place a fixed colour is
+correct.
 
 The glyph itself is stroke-based, not a filled path. The coordinates in
 `MessageStatusTicks.tsx` are the stroke centrelines of Material's `done_all`

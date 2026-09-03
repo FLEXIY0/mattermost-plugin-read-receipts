@@ -1,5 +1,5 @@
 PLUGIN_ID := com.github.mattermost-message-status
-PLUGIN_VERSION := 1.2.1
+PLUGIN_VERSION := 1.4.0
 BUNDLE_NAME := $(PLUGIN_ID)-$(PLUGIN_VERSION).tar.gz
 
 GO ?= go

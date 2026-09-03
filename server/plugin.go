@@ -249,15 +249,18 @@ func (p *Plugin) markRead(postID, readerID string) (*PostStatus, *model.AppError
 		return nil, nil
 	}
 
-	return p.appendReader(postID, readerID, func() *PostStatus {
+	return p.appendReaders(postID, []string{readerID}, func() *PostStatus {
 		return statusForPost(post)
 	})
 }
 
-// appendReader runs the read/modify/write loop that records one reader against
-// a post. seed supplies a record when nothing is stored yet; if it returns nil
-// the post is left alone. Callers are responsible for authorizing the reader.
-func (p *Plugin) appendReader(postID, readerID string, seed func() *PostStatus) (*PostStatus, *model.AppError) {
+// appendReaders runs the read/modify/write loop that records readers against a
+// post. All of them land in one compare-and-set, which matters for the
+// view-based sync: a channel can turn up a dozen readers for the same post at
+// once, and one CAS per reader would be a dozen storage round trips. seed
+// supplies a record when nothing is stored yet; if it returns nil the post is
+// left alone. Callers are responsible for authorizing the readers.
+func (p *Plugin) appendReaders(postID string, readerIDs []string, seed func() *PostStatus) (*PostStatus, *model.AppError) {
 	for attempt := 0; attempt < casAttempts; attempt++ {
 		raw, status, appErr := p.getStatus(postID)
 		if appErr != nil {
@@ -273,8 +276,15 @@ func (p *Plugin) appendReader(postID, readerID string, seed func() *PostStatus) 
 			}
 		}
 
-		if !status.addReader(readerID) {
-			// Already recorded, or the reader cap is full: nothing to write.
+		changed := false
+		for _, readerID := range readerIDs {
+			if status.addReader(readerID) {
+				changed = true
+			}
+		}
+
+		if !changed {
+			// All already recorded, or the reader cap is full: nothing to write.
 			return status, nil
 		}
 

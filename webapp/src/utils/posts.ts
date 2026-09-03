@@ -110,6 +110,33 @@ export function isEligiblePost(post: Post | undefined): post is Post {
     return true;
 }
 
+// The ticks are absolutely positioned over the bottom-right of the post body,
+// so on a post that ends in an image or a link preview they sit on top of that
+// picture rather than on the theme background — and a theme-coloured tick is
+// invisible over a photo of the wrong tone. Such posts get their own scrim
+// instead; see `.message-status-ticks-attachment[data-over-media='true']`.
+export function postHasMedia(post: Post | undefined): boolean {
+    if (!post) {
+        return false;
+    }
+
+    if (post.file_ids?.length) {
+        return true;
+    }
+
+    const metadata = post.metadata as Post['metadata'] | undefined;
+    if (metadata?.files?.length) {
+        return true;
+    }
+
+    // Populated for markdown images and for link-preview thumbnails alike.
+    if (metadata?.images && Object.keys(metadata.images).length > 0) {
+        return true;
+    }
+
+    return Boolean(metadata?.embeds?.some((embed) => embed?.type === 'image'));
+}
+
 export function isOwnPost(post: Post, currentUserId: string): boolean {
     return post.user_id === currentUserId;
 }
