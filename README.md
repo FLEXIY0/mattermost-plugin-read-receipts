@@ -42,7 +42,7 @@ Build the bundle, then upload it:
 
 ```bash
 make dist
-mmctl plugin upload dist/com.github.mattermost-message-status-1.2.1.tar.gz
+mmctl plugin upload dist/com.github.mattermost-message-status-1.3.0.tar.gz
 mmctl plugin enable com.github.mattermost-message-status
 ```
 
@@ -54,9 +54,15 @@ file and enable **Message Status**. Reload the web client afterwards
 
 **System Console → Plugins → Message Status** has one setting:
 
-- **Checkmark size (pixels)** — height of the ticks, 8–20, default 11. Spacing
-  scales with it. Values outside the range fall back to the default. Users pick
+- **Checkmark size (pixels)** — height of the ticks, 6–20, default 11. Spacing
+  scales with it, and the stroke thickens at the smallest sizes so the glyph
+  stays legible. Values outside the range fall back to the default. Users pick
   up a change on their next reload.
+
+On a post that ends in an image or a link preview the ticks sit on top of that
+picture, so there they are drawn white on a dark rounded scrim instead of in the
+theme colour — a theme-coloured tick is invisible over a photo of the wrong
+tone.
 
 `make dist` builds a Linux-only bundle. Use `make dist-all` for a bundle that
 also carries the macOS and Windows binaries (larger; may need a higher
@@ -107,7 +113,7 @@ webapp.
 To cut a release, bump the version in `plugin.json`, `plugin.full.json`,
 `Makefile` and `webapp/src/manifest.ts`, then either:
 
-- push a tag — `git tag v1.2.1 && git push origin v1.2.1`, or
+- push a tag — `git tag v1.3.0 && git push origin v1.3.0`, or
 - use **Releases → Draft a new release** on GitHub and create the tag there.
 
 Either way CI verifies that all four files agree with the tag, runs the checks,

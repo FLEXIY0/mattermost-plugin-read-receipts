@@ -2,7 +2,7 @@ package main
 
 const (
 	defaultTickSize = 11
-	minTickSize     = 8
+	minTickSize     = 6
 	maxTickSize     = 20
 )
 

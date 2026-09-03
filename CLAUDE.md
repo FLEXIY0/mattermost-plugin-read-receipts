@@ -219,6 +219,18 @@ breaks on dark themes and is not the intended Telegram look). Delivered and read
 share one hue and differ only in alpha — the meaning is carried by one tick vs.
 two.
 
+`strokeWidth()` widens the stroke below ~8px. The stroke is 2 units of a
+15-unit viewBox, so at 6px it renders as 0.8 device px — a grey smudge rather
+than a tick; the floor keeps roughly a pixel of ink at any size.
+
+Posts whose ticks land on a picture (`postHasMedia`: attachments,
+`metadata.files`, `metadata.images`, image embeds) get
+`data-over-media='true'`, which swaps the theme colour for white on a dark
+scrim. The theme's text colour is meaningless over a photo — light ticks vanish
+on a light image and dark ones on a dark image, and which happens has nothing
+to do with the active theme — so this is the one place a fixed colour is
+correct.
+
 The glyph itself is stroke-based, not a filled path. The coordinates in
 `MessageStatusTicks.tsx` are the stroke centrelines of Material's `done_all`
 outline, traced from its 24-unit grid — so the read state is two *overlapping*

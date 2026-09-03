@@ -8,5 +8,5 @@ export const READ_THRESHOLD = 0.5;
 // Overridable per instance through the plugin's TickSize setting; these bounds
 // mirror server/config.go and exist so a bad value cannot break rendering.
 export const DEFAULT_TICK_SIZE = 11;
-export const MIN_TICK_SIZE = 8;
+export const MIN_TICK_SIZE = 6;
 export const MAX_TICK_SIZE = 20;

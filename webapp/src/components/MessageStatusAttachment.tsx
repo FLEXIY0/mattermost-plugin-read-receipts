@@ -8,7 +8,7 @@ import type {Post} from '@mattermost/types/posts';
 import {getTickSize} from '../actions/status';
 import {formatReadByLabel, getTranslationsForLocale} from '../i18n';
 import {usePostStatus} from '../hooks/usePostStatus';
-import {getOtherUserIdInDM, getUserDisplayName, isDirectChannel, isEligiblePost, isOwnPost} from '../utils/posts';
+import {getOtherUserIdInDM, getUserDisplayName, isDirectChannel, isEligiblePost, isOwnPost, postHasMedia} from '../utils/posts';
 import MessageStatusTicks from './MessageStatusTicks';
 
 type Props = {
@@ -75,6 +75,7 @@ const MessageStatusAttachment: React.FC<Props> = ({postId, post: postProp, store
         <div
             className='message-status-ticks-attachment'
             data-message-status={status}
+            data-over-media={postHasMedia(post) ? 'true' : undefined}
         >
             <MessageStatusTicks
                 status={status}

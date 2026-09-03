@@ -27,10 +27,20 @@ const VIEWBOX_HEIGHT = 15;
 const VIEWBOX_WIDTH = {delivered: 18.3, read: 24};
 const STROKE_WIDTH = 2;
 
+// A stroke of 2 viewBox units renders thinner and thinner as the glyph shrinks
+// — at 6px it is 0.8 device px, which is a grey smudge rather than a tick. Below
+// roughly 8px the stroke is widened to keep about a pixel of ink.
+const MIN_STROKE_PX = 1.1;
+
+function strokeWidth(size: number): number {
+    return Math.max(STROKE_WIDTH, (MIN_STROKE_PX * VIEWBOX_HEIGHT) / size);
+}
+
 const MessageStatusTicks: React.FC<Props> = ({status, label, title, size}) => {
     const isRead = status === 'read';
     const paths = isRead ? [CHECK_REAR_STUB, CHECK_REAR_ARM, CHECK_FRONT] : [CHECK_SINGLE];
     const viewBoxWidth = VIEWBOX_WIDTH[status];
+    const stroke = strokeWidth(size);
 
     return (
         <span
@@ -53,7 +63,7 @@ const MessageStatusTicks: React.FC<Props> = ({status, label, title, size}) => {
                         d={d}
                         fill='none'
                         stroke='currentColor'
-                        strokeWidth={STROKE_WIDTH}
+                        strokeWidth={stroke}
                         strokeLinecap='round'
                         strokeLinejoin='round'
                     />
