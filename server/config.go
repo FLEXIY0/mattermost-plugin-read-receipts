@@ -10,6 +10,12 @@ const (
 // match the setting keys exactly — LoadPluginConfiguration maps them by name.
 type configuration struct {
 	TickSize int
+
+	// A pointer so an upgraded install, whose stored config predates this
+	// setting, is told apart from an admin who deliberately switched it off.
+	// Absent means on; a plain bool would silently default such installs to
+	// false and quietly disable the feature on upgrade.
+	ChannelReadSync *bool
 }
 
 // normalized pulls out-of-range values back to the default. The System Console
@@ -20,7 +26,16 @@ func (c configuration) normalized() configuration {
 		c.TickSize = defaultTickSize
 	}
 
+	if c.ChannelReadSync == nil {
+		enabled := true
+		c.ChannelReadSync = &enabled
+	}
+
 	return c
+}
+
+func (c configuration) channelReadSyncEnabled() bool {
+	return c.ChannelReadSync == nil || *c.ChannelReadSync
 }
 
 func (p *Plugin) OnConfigurationChange() error {
