@@ -46,17 +46,25 @@ The plugin **ID** is duplicated in `plugin.json`, `plugin.full.json`,
 
 ## Releases
 
-`.github/workflows/release.yml` fires on a version tag (`v1.2.1` or a bare
-`1.2.1`) and on a release published from the web UI. It re-checks that all four
+`.github/workflows/release.yml` fires three ways, all landing in the same job:
+a pushed version tag (`v1.4.0` or a bare `1.4.0`), a release published from the
+web UI, and `workflow_dispatch` with a `tag` input — the last needs no local git
+at all, and is the one to reach for when the tag cannot be pushed from a
+checkout. It re-checks that all four
 version declarations equal the tag (minus any `v`) and **fails the release** if
 any of them drifted, so the bump above is enforced rather than remembered. It
 then runs `make check`, builds both bundles and publishes them.
 
-Publishing a release in the web UI creates the tag and the release in one step,
-so the job can start with the release already existing. The publish step
+The dispatch input is validated against a version shape before anything else
+runs, and the version gate above runs before the tag exists, so a typo or a
+forgotten bump fails the run without leaving a stray tag or release behind.
+
+Publishing a release in the web UI instead creates the tag and the release in
+one step, so the job can start with the release already existing. The publish step
 therefore uploads to an existing release (leaving its notes alone) and only
 creates one when there is none — `gh release create` would otherwise fail
-outright. That also makes re-runs safe. Both triggers can fire for the same
+outright. It passes `--target "${GITHUB_SHA}"`, which is what lets the dispatch
+path create the tag itself. That also makes re-runs safe. Both triggers can fire for the same
 web-UI release, so a `concurrency` group keeps two runs from uploading at once.
 
 The two bundles are built from the same `dist/` filename, so the workflow moves

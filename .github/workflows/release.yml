@@ -17,9 +17,15 @@ on:
   # run just re-uploads the same files.
   release:
     types: [published]
-  # Builds the same bundles and uploads them as workflow artifacts without
-  # publishing a release, so the pipeline can be exercised before tagging.
+  # The whole release from the Actions tab: fill in the tag and this creates it,
+  # builds and publishes. Left empty it only builds and uploads the bundles as
+  # workflow artifacts, so the pipeline can be exercised without publishing.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish, e.g. v1.4.0. Leave empty to build only.'
+        required: false
+        type: string
 
 # Never let two runs for the same tag upload assets at the same time.
 concurrency:
@@ -54,14 +60,23 @@ jobs:
         id: version
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
 
           case "${GITHUB_EVENT_NAME}" in
-            release) tag="${RELEASE_TAG}" ;;
-            push)    tag="${GITHUB_REF_NAME}" ;;
-            *)       tag="" ;;
+            release)           tag="${RELEASE_TAG}" ;;
+            push)              tag="${GITHUB_REF_NAME}" ;;
+            workflow_dispatch) tag="$(echo "${INPUT_TAG:-}" | tr -d '[:space:]')" ;;
+            *)                 tag="" ;;
           esac
+
+          # Catch a typo before anything is created, rather than leaving a bad
+          # tag and release behind to be cleaned up by hand.
+          if [ -n "${tag}" ] && ! printf '%s' "${tag}" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'${tag}' is not a version tag. Expected something like v1.4.0 or 1.4.0-rc1."
+            exit 1
+          fi
 
           if [ -n "${tag}" ]; then
             # Accepts both v1.2.1 and 1.2.1.
@@ -167,6 +182,12 @@ jobs:
             exit 0
           fi
 
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "Publishing a release for the existing tag ${TAG}."
+          else
+            echo "Creating tag ${TAG} at ${GITHUB_SHA} and publishing it."
+          fi
+
           # A tag like v1.2.0-rc1 is a prerelease.
           prerelease=''
           case "${VERSION}" in
@@ -195,6 +216,7 @@ jobs:
           NOTES
 
           gh release create "${TAG}" \
+            --target "${GITHUB_SHA}" \
             --title "${TAG}" \
             --notes-file notes.md \
             --generate-notes \
