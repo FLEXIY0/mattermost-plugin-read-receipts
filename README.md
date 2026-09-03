@@ -120,15 +120,17 @@ without checking them, so `check-types` is the only thing that validates the
 webapp.
 
 To cut a release, bump the version in `plugin.json`, `plugin.full.json`,
-`Makefile` and `webapp/src/manifest.ts`, then either:
+`Makefile` and `webapp/src/manifest.ts`, then start it from **Actions →
+Release → Run workflow** and fill in the tag (`v1.4.0`). The workflow creates
+the tag, builds and publishes — nothing to do locally.
 
-- push a tag — `git tag v1.4.0 && git push origin v1.4.0`, or
-- use **Releases → Draft a new release** on GitHub and create the tag there.
+It refuses to publish unless all four files already agree with the tag, and it
+checks that *before* creating anything, so a wrong version leaves nothing to
+clean up. Leave the tag box empty to build the bundles as workflow artifacts
+without publishing.
 
-Either way CI verifies that all four files agree with the tag, runs the checks,
-and attaches the bundles with checksums to the release.
-
-See [CLAUDE.md](CLAUDE.md) for the architecture notes.
+Pushing a tag (`git tag v1.4.0 && git push origin v1.4.0`) or publishing from
+**Releases → Draft a new release** work too; all three end at the same place.
 
 ## License
 
